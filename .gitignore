@@ -1,8 +1,10 @@
-/block-lists/
-/consolidated-block-list/
-/mxtoolbox-cache/
-/reports/
+/*.code-workspace
 /*.conf
 /*.txt
-/*.code-workspace
+/block-lists/
+/bulk-check/
+/consolidated-block-list/
+/misc/
+/mxtoolbox-cache/
+/reports/
 /snort-monitor.service

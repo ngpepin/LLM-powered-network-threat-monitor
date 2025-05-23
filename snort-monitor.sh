@@ -4,76 +4,77 @@
 #
 # Overview:
 #   This script provides a comprehensive monitoring and analysis solution for
-#   Snort and ntopng logs. It periodically analyzes log files, generates
-#   prioritized threat summaries using the OpenAI API, and serves the results
-#   as a dynamic web page. The script also manages block lists, consolidates
-#   IPs for firewall blocking, and provides PDF reporting.
+#   Snort IDS and ntopng network traffic logs. It performs periodic analysis
+#   of both log sources, generates prioritized threat summaries using the
+#   OpenAI API, and serves the results as a dynamic web page. The integrated
+#   solution provides enhanced network visibility by correlating intrusion
+#   detection alerts with traffic flow patterns.
 #
 # Features:
-#   - Periodic analysis of Snort and ntopng logs with configurable intervals.
-#   - Integration with OpenAI API for advanced threat analysis and recommendations.
-#   - Dynamic HTML web page generation with threat summaries and log content.
-#   - Simple Python-based HTTP server with cache control for serving the web page.
-#   - Automated block list consolidation and sharing via HTTP.
-#   - PDF report generation of each analysis.
-#   - Graceful error handling and automatic retries for API and server failures.
+#   - Periodic analysis of Snort IDS alerts and ntopng traffic logs with
+#     configurable intervals and randomized timing to avoid patterns
+#   - Integration with OpenAI API for advanced threat correlation and analysis
+#   - Dynamic HTML web page generation with threat summaries and log content
+#   - Simple Python-based HTTP server with cache control for serving results
+#   - Automated block list generation and consolidation with whitelist filtering
+#   - PDF report generation for each analysis session
+#   - Graceful error handling and automatic retries for API/server failures
+#   - Background monitoring of block list directory for real-time updates
 #
 # Configuration:
-#   - SNORT_LOG: Path to the Snort log file (from snort-monitor.conf).
-#   - NTOPNG_LOG: Path to the ntopng log file (from snort-monitor.conf).
-#   - API_ENDPOINT: OpenAI API endpoint (from snort-monitor.conf).
-#   - API_KEY: OpenAI API key (from snort-monitor.conf).
-#   - MODEL: OpenAI model to use (from snort-monitor.conf).
-#   - WEB_DIR: Directory for web files.
-#   - TIMESTAMP_FILE: File to store the last check timestamp.
-#   - LOG_FILE: Log file for the script.
-#   - BLOCK_LIST_DIR: Directory for block lists.
-#   - CONSOLIDATED_FILE_SHARE: Directory for consolidated block list (Samba share).
-#   - CONSOLIDATED_FILE: Consolidated block list file.
-#   - WHITELIST_FILE: IP whitelist file.
-#   - REPORTS_DIR: Directory for PDF reports.
-#   - UPDATE_INTERVAL: Base interval for log analysis (seconds).
-#   - INTERVAL_PERTURBATION_MIN/MAX: Perturbation range for randomized intervals.
-#   - WEBPAGE_EXPIRATION_GRACE: Grace period for webpage expiration (seconds).
-#   - WEB_PORT: Port for the analysis web server.
-#   - LOG_LINES_TO_SHOW: Number of log lines to analyze and display.
-#   - BLOCK_LIST_WEB_PORT: Port for the block list web server.
+#   - SNORT_LOG: Path to Snort alert log file (from snort-monitor.conf)
+#   - NTOPNG_LOG: Path to ntopng log file (from snort-monitor.conf)
+#   - API_ENDPOINT/API_KEY/MODEL: OpenAI API configuration
+#   - WEB_DIR: Directory for web interface files
+#   - TIMESTAMP_FILE: Tracks last analysis time
+#   - LOG_FILE: Script activity log location
+#   - BLOCK_LIST_DIR: Storage for generated block lists
+#   - CONSOLIDATED_FILE_SHARE: Shared location for final block list
+#   - WHITELIST_FILE: IP addresses to exclude from blocking
+#   - REPORTS_DIR: Storage for generated PDF reports
+#   - UPDATE_INTERVAL: Base analysis interval (seconds)
+#   - INTERVAL_PERTURBATION_MIN/MAX: Range for randomizing intervals
+#   - WEBPAGE_EXPIRATION_GRACE: Buffer time for analysis completion
+#   - WEB_PORT: Web interface port
+#   - LOG_LINES_TO_SHOW: Number of log lines to process/display
+#   - BLOCK_LIST_WEB_PORT: Block list sharing port
+#   - DELETE_BLOCK_LISTS_AFTER: Retention period for block lists (days)
 #
 # Dependencies:
 #   - Bash shell
-#   - Python 3 (for HTTP server)
-#   - jq (for JSON processing)
-#   - curl (for API requests)
-#   - wkhtmltopdf (for PDF reports)
-#   - inotifywait (for directory monitoring)
+#   - Python 3 (for HTTP servers)
+#   - jq (JSON processing)
+#   - curl (API requests)
+#   - wkhtmltopdf (PDF report generation)
+#   - inotify-tools (directory monitoring)
 #
 # Main Functions:
-#   - log: Logs messages with timestamps.
-#   - escape_json: Escapes strings for JSON safety.
-#   - escape_html: Escapes HTML special characters.
-#   - encode/decode: Base64 encode/decode for safe parameter passing.
-#   - remove_backticks: Cleans up code block formatting from strings.
-#   - start_web_server: Runs the Python HTTP server for the web UI.
-#   - share_block_list_via_HTTP: Serves the consolidated block list via HTTP.
-#   - save_PDF_report: Saves analysis as a PDF report.
-#   - create_webpage: Generates the HTML web page for analysis results.
-#   - is_public_ip: Checks if an IP is public/routable.
-#   - consolidate_ips: Consolidates and deduplicates block list IPs, applies whitelist.
-#   - start_monitor: Monitors block list directory for changes and triggers consolidation.
-#   - cleanup: Handles script exit and cleanup.
-#   - update_analysis: Performs log analysis, calls API, updates web page, manages block list.
-#   - calculate_perturbed_interval: Computes randomized analysis intervals.
+#   - log: Timestamped logging utility
+#   - escape_json/html: Data sanitization functions
+#   - encode/decode: Base64 parameter handling
+#   - remove_backticks: Text formatting cleanup
+#   - start_web_server: Main analysis web interface
+#   - share_block_list_via_HTTP: Block list sharing service
+#   - save_PDF_report: Report generation
+#   - create_webpage: HTML content generation
+#   - is_public_ip: IP address classification
+#   - consolidate_ips: Block list processing
+#   - start_monitor: Directory watcher for block lists
+#   - cleanup: Exit handler
+#   - update_analysis: Core analysis workflow
+#   - calculate_perturbed_interval: Randomized timing
 #
 # Usage:
-#   1. Configure snort-monitor.conf with correct paths and API credentials.
-#   2. Run the script to start monitoring and serving the web page.
-#   3. Access the analysis at http://<server-ip>:<WEB_PORT>.
-#   4. Access the consolidated block list at http://<server-ip>:<BLOCK_LIST_WEB_PORT>.
+#   1. Configure snort-monitor.conf with paths and API credentials
+#   2. Run script to start monitoring and web interface
+#   3. Access analysis at http://<server>:<WEB_PORT>
+#   4. Access block list at http://<server>:<BLOCK_LIST_WEB_PORT>
 #
 # Notes:
-#   - The script is designed for continuous operation and resilience.
-#   - All generated files and logs are managed in specified directories.
-#   - The web page and block list are automatically refreshed and updated.
+#   - Designed for continuous operation with resilience features
+#   - All generated files are managed in configured directories
+#   - Web interface and block lists auto-refresh
+#   - Correlates Snort alerts with ntopng traffic patterns
 # -----------------------------------------------------------------------------
 #
 # Shellcheck directives
@@ -84,26 +85,46 @@
 # shellcheck disable=SC2001
 
 # Configuration variables
-SNORT_LOG=""    # Path to the snort log file (sourced from snort-monitor.conf
-NTOPNG_LOG=""   # Path to the ntopng log file (sourced from snort-monitor.conf)
-API_ENDPOINT="" # OpenAI API endpoint (sourced from snort-monitor.conf)
-API_KEY=""      # OpenAI API key (sourced from snort-monitor.conf)
-MODEL=""        # OpenAI model to use (sourced from snort-monitor.conf)
+SNORT_LOG=""            # Path to the snort log file (sourced from snort-monitor.conf
+NTOPNG_LOG=""           # Path to the ntopng log file (sourced from snort-monitor.conf)
+API_ENDPOINT=""         # OpenAI API endpoint (sourced from snort-monitor.conf)
+API_KEY=""              # OpenAI API key (sourced from snort-monitor.conf)
+MODEL=""                # OpenAI model to use (sourced from snort-monitor.conf)
+
+# Override this default prompt text in snort-monitor.conf if you wish:
+ANALYSIS_PROMPT_TEXT="You are an expert cybersecurity analyst. Correlate and fully analyze the following recent logs from Snort and ntopng and provide: 
+1. HIGHEST THREAT LEVEL REACHED: Comprises a single word on the next line, either HIGH, MEDIUM, LOW or N/A (for no threat level), indicating the 
+highest threat level reported in the analysis that follows. This will be parsed later by automation. 
+2. ASSESSMENT: A succinct summary of the bottom line and a sense of what the urgency is. 
+3. THREATS: A prioritized table of threats organized by threat levels (High/Medium/Low), noting which IPs are involved.
+4. TIMELINE: a timeline of the threats, indicating time intervals during which they occurred. Include the day of the month in these intervals if not all times are from today <insert_date>.
+5. NEXT STEPS: A bulleted list of recommended next steps, including any actions to take and any additional information needed, sorted by priority with the most urgent coming first.
+6. TECHNICAL DISCUSSION: An advanced-level technical discussion of the threats observed, providing relevant technical explanations and background, 
+as well as technical justifications for the prioritization. 
+Please review these notes before proceeding with the analysis:
+... provide some network details ...
+b) Format your response as HTML for visually appealing web display. Avoid special characters that may not appear properly in the browser. Do not use any Markdown.
+c) Please use tables with background cell colors denoting priority, with high priority indicated by a background of pale red, medium by pale orange, and low by pale green. 
+d) Ensure prioritizations are used consistently for the same items throughout your response." 
+
+# Override this default prompt text in snort-monitor.conf if you wish:
+BLOCKLIST_PROMPT_TEXT="You are an expert cybersecurity analyst. Based on the following threat analysis and logs from Snort and ntopng, provide a comprehensive list of external (routable) IP addresses that should be blocked at the firewall level by pfSense.  Please research these IPs to ensure that you are not including in the block list IPs that are controlled by trusted hosts and providers, or essential for accessing ubiquitous services like Microsoft 365 or Gmail.  No internal (non-routable) IP addresses should be included in the list. 
+The list should be formatted as a plain text list of IPs, one per line, with no subnetwork masking (list each IP individually on its own line).Do not respond with any other text or explanation. Please make sure your output is NOT formatted as HTML, Markdown or JSON. It should be strictly plain text."
 
 # Source the configuration file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/snort-monitor.conf"
 
-WEB_DIR="/var/www/snort-monitor"                                                       # Directory for web files
-TIMESTAMP_FILE="/tmp/last_snort_check.time"                                            # File to store the last check timestamp
-LOG_FILE="/var/log/snort-monitor.log"                                                  # Log file for the script
-BLOCK_LIST_DIR="$SCRIPT_DIR/block-lists"                                               # Directory to store block lists in
-CONSOLIDATED_FILE_SHARE="$SCRIPT_DIR/consolidated-block-list"                          # Consolidated block list directory (samba share)
-CONSOLIDATED_FILE="$CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt"               # Consolidated block list file
+WEB_DIR="/var/www/snort-monitor"                                         # Directory for web files
+TIMESTAMP_FILE="/tmp/last_snort_check.time"                              # File to store the last check timestamp
+LOG_FILE="/var/log/snort-monitor.log"                                    # Log file for the script
+BLOCK_LIST_DIR="$SCRIPT_DIR/block-lists"                                 # Directory to store block lists in
+CONSOLIDATED_FILE_SHARE="$SCRIPT_DIR/consolidated-block-list"            # Consolidated block list directory (samba share)
+CONSOLIDATED_FILE="$CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt" # Consolidated block list file
 # WhoAmI functionality moved to separate script
 # CONSOLIDATED_FILE_WHOAMI="$CONSOLIDATED_FILE_SHARE/consolidated-block-list-whoami.csv" # Consolidated block list file
-WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist.txt"                                          # IP whitelist file
-REPORTS_DIR="$SCRIPT_DIR/reports"                                                      # Directory to store PDF reports in
+WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist.txt" # IP whitelist file
+REPORTS_DIR="$SCRIPT_DIR/reports"             # Directory to store PDF reports in
 
 # Update Interval and Pertubation variables
 UPDATE_INTERVAL=600           # Interval to check for new logs (in seconds)
@@ -122,9 +143,6 @@ last_analysis=""
 last_log_content=""
 last_response=""
 last_update_time=""
-
-# Flag for initial consolidation of the block list
-initial_consolidation=true
 
 # Create directories if they don't exist
 mkdir -p "$WEB_DIR"
@@ -263,12 +281,27 @@ share_block_list_via_HTTP() {
 # -----------------------------------------------------------------------
 # Function: save_PDF_report
 # -----------------------------------------------------------------------
-# Saves the Snort alert monitoring analysis as a PDF report.
-# The function takes the following parameters:
+# Generates a PDF report from the threat analysis HTML content. The report
+# filename includes the threat level and timestamp for easy identification.
+# Handles both Snort and ntopng-derived threat information in the content.
 #
 # Parameters:
-#   threat_level: The threat level of the analysis (e.g., "HIGH", "MEDIUM", "LOW").
-#   html_content: The HTML content to include in the PDF report.
+#   $1 - threat_level: The highest threat level identified (HIGH/MEDIUM/LOW/N/A)
+#   $2 - html_content: The analysis content in HTML format, including both
+#        Snort and ntopng threat information
+#
+# Behavior:
+#   - Creates timestamped PDF filename with sanitized threat level
+#   - Generates temporary HTML file for wkhtmltopdf processing
+#   - Converts HTML to PDF using wkhtmltopdf
+#   - Validates PDF was created successfully
+#   - Cleans up temporary files
+#   - Logs success/failure
+#
+# Dependencies:
+#   - wkhtmltopdf for PDF generation
+#   - Temporary file creation
+# -----------------------------------------------------------------------
 #
 save_PDF_report() {
     local threat_level="$1"
@@ -299,34 +332,32 @@ save_PDF_report() {
 # -----------------------------------------------------------------------
 # Function: create_webpage
 # -----------------------------------------------------------------------
-# Generates an HTML webpage to display the Snort alert monitoring analysis.
-# The function takes the following parameters:
+# Generates the HTML interface displaying correlated Snort/ntopng analysis.
+# Handles both updated content and cached displays when no new alerts exist.
 #
-# Parameters:
-#   $1 (updated): A flag indicating whether the webpage is being updated ("true" or "false").
-#   $2 (expire_secs): The expiration time of the webpage in seconds (base64 encoded).
-#   $3 (analysis): The analysis content to display on the webpage (base64 encoded).
-#   $4 (log_content): The Snort log content to display on the webpage (base64 encoded).
-#   $5 (api_response): The last successful API response content (base64 encoded).
-#   $6 (error): An error message to display if applicable (base64 encoded).
-#   $7 (snort_log_updated_time): The last modification time of the Snort logs (UNIX timestamp, base64 encoded).
+# Parameters (base64 encoded):
+#   $1 - updated: "true" if new analysis, "false" for cached display
+#   $2 - expire_secs: Webpage expiration time in seconds
+#   $3 - analysis: Formatted HTML analysis content
+#   $4 - log_content: Recent Snort/ntopng log entries
+#   $5 - api_response: Raw API response for debugging
+#   $6 - error: Error message if applicable
+#   $7 - snort_log_updated_time: Timestamp of last log modification
 #
-# Behaviour:
-# - Decodes the base64-encoded inputs using the `decode` function.
-# - If no analysis, log content, or API response is provided, default messages are used.
-# - If the webpage is not being updated (`updated` is "false"), it reuses the last known
-#   analysis, log content, and API response, along with the last update time.
-# - If the webpage is being updated (`updated` is "true"), it updates the last known
-#   values and sets the current update time.
-# - Calculates the expiration time of the webpage in both GMT and local formats.
-# - Formats the Snort log last updated time, displaying "n/a" if the timestamp is invalid
-#   or before 2010.
-# - Generates an HTML file at `$WEB_DIR/index.html` with the following sections:
-#   - A header displaying the last analysis time, Snort log modification time, and webpage expiration time.
-#   - The analysis content.
-#   - The recent Snort logs (up to `$LOG_LINES_TO_SHOW` lines).
-#   - The last successful API response.
-# - Includes inline CSS for styling the webpage.
+# Behavior:
+#   - Decodes all input parameters
+#   - Maintains last known good state for cached displays
+#   - Formats timestamps for display (analysis time, log mod time, expiry)
+#   - Generates complete HTML page with:
+#     - Threat analysis section
+#     - Recent log display (both Snort and ntopng)
+#     - API response debug area
+#     - Automatic refresh timing
+#   - Applies consistent styling for threat level visualization
+#
+# Output:
+#   - Creates/updates $WEB_DIR/index.html
+# -----------------------------------------------------------------------
 #
 create_webpage() {
     local updated="$1"                            # Whether the webpage is being updated
@@ -451,20 +482,24 @@ EOF
 # -----------------------------------------------------------------------
 # Function: is_public_ip
 # -----------------------------------------------------------------------
-# Checks if the given IP address is a public IPv4 address.
-# Arguments:
-#   $1 - The IP address to check.
+# Determines if an IP address is public/routable, filtering out private,
+# reserved, and internal addresses. Used to validate block list candidates
+# from both Snort and ntopng sources.
+#
+# Parameters:
+#   $1 - ip: IPv4 address to check
+#
 # Returns:
-#   0 if the IP address is public, 1 otherwise.
-# Notes:
-#   - Returns 1 if the IP is not a valid IPv4 address.
-#   - Considers the following ranges as non-public (private, loopback, link-local, or reserved):
-#       10.0.0.0/8
-#       172.16.0.0/12
-#       192.168.0.0/16
-#       169.254.0.0/16
-#       127.0.0.0/8
-#       100.64.0.0/10 (Carrier-grade NAT)
+#   0 - IP is public/routable
+#   1 - IP is private/reserved/invalid
+#
+# Filtered Ranges:
+#   - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC 1918)
+#   - 169.254.0.0/16 (APIPA)
+#   - 127.0.0.0/8 (loopback)
+#   - 100.64.0.0/10 (Carrier-grade NAT)
+#   - Invalid/malformed addresses
+# -----------------------------------------------------------------------
 #
 is_public_ip() {
     local ip="$1"
@@ -483,53 +518,30 @@ is_public_ip() {
 }
 
 # -----------------------------------------------------------------------
-# Functions: consolidate_ips & create_whoami_file
+# Function: consolidate_ips
 # -----------------------------------------------------------------------
-# Consolidates IP addresses from multiple block list files, applies a whitelist, and outputs a deduplicated, sorted list.
-# The second function creates a WHOAMI file with DNS and organization information for each IP.
+# Processes IP addresses from generated block lists, applying validation
+# and whitelist filtering. Handles IPs from both Snort alerts and ntopng
+# traffic patterns. Creates a unified block list for firewall implementation.
 #
-# Steps performed:
-# 1. Ensures the whitelist file exists.
-# 2. Extracts all IPv4 addresses from files in the block list directory.
-# 3. Filters out invalid IP addresses (ensures each octet is between 0 and 255).
-# 4. Removes any IPs present in the whitelist.
-# 5. Sorts the resulting IPs numerically and removes duplicates.
-# 6. Atomically updates the consolidated block list file.
-# 7. Cleans up temporary files used during processing.
+# Steps:
+#   1. Collects IPs from all block list files in $BLOCK_LIST_DIR
+#   2. Validates each IP format and filters invalid addresses
+#   3. Applies whitelist from $WHITELIST_FILE
+#   4. Removes duplicates and sorts remaining IPs
+#   5. Updates $CONSOLIDATED_FILE only if changes exist
+#   6. Maintains audit logging of all actions
 #
-# Globals required:
-#   - WHITELIST_FILE: Path to the whitelist file.
-#   - BLOCK_LIST_DIR: Directory containing block list files.
-#   - CONSOLIDATED_FILE: Output file for the consolidated IP list.
-#   - log: Function for logging messages.
+# Temporary Files:
+#   - Uses mktemp for intermediate processing
+#   - Ensures clean removal after processing
 #
-
-# create_whoami_file() {
-#     # Create/clear the output file with CSV header
-#     echo "IP Address,DNS Name,Organization" >"$CONSOLIDATED_FILE_WHOAMI"
-
-#     # Skip if no IPs to process
-#     [ ! -f "$CONSOLIDATED_FILE" ] && return
-
-#     # Process each IP in the consolidated file
-#     while read -r ip; do
-#         # Perform DNS reverse lookup (with timeout)
-#         dns_name=$(timeout 2 dig +short -x "$ip" 2>/dev/null | head -1 | sed 's/\.$//')
-#         [ -z "$dns_name" ] && dns_name="N/A"
-
-#         # Get organization info from WHOIS (with timeout)
-#         org_info=$(timeout 2 whois "$ip" 2>/dev/null |
-#             awk -F':' '/^OrgName:|^descr:|^owner:|^netname:/ {print $2; exit}' |
-#             sed 's/^ *//;s/ *$//')
-#         [ -z "$org_info" ] && org_info="N/A"
-
-#         # Append to CSV file
-#         echo "\"$ip\",\"$dns_name\",\"$org_info\"" >>"$CONSOLIDATED_FILE_WHOAMI"
-#     done <"$CONSOLIDATED_FILE"
-
-#     log "Created WHOAMI file with DNS information"
-# }
-
+# Notes:
+#   - Only processes valid, public IPv4 addresses
+#   - Maintains idempotency - only updates consolidated file when needed
+#   - Handles empty whitelist scenarios gracefully
+# -----------------------------------------------------------------------
+#
 consolidate_ips() {
     # Create empty whitelist if file doesn't exist
     [ -f "$WHITELIST_FILE" ] || touch "$WHITELIST_FILE"
@@ -582,7 +594,6 @@ consolidate_ips() {
 
     # Cleanup temp files
     rm -f "$TEMP_ALL_IPS" "$TEMP_VALID_IPS" "$TEMP_FILTERED_IPS"
-    # create_whoami_file &
 }
 
 # Background monitoring function
@@ -622,26 +633,38 @@ cleanup() {
 # -----------------------------------------------------------------------
 # Function: update_analysis
 # -----------------------------------------------------------------------
-# Updates the analysis of Snort logs by performing the following steps:
-# 1. Checks if the Snort log file has been updated since the last analysis.
-# 2. Reads the latest log entries and formats them for API submission.
-# 3. Sends the log data to an external API for analysis, requesting a prioritized
-#    summary of threats, threat levels, timelines, and recommended actions.
-# 4. Handles the API response, extracting and cleaning the analysis results.
-# 5. Generates a web page displaying the analysis, log content, and any errors.
-# 6. Updates the timestamp of the last analysis to avoid redundant processing.
+# Core function that performs periodic analysis of Snort and ntopng logs.
+# Correlates data from both sources, generates threat assessments via API,
+# and triggers follow-up actions including web updates and block list
+# generation.
 #
 # Parameters:
-# - $1: Encoded expiration time for the web page in seconds.
+#   $1 - expires_in: Encoded webpage expiration time in seconds
 #
-# Dependencies:
-# - Requires external tools such as `jq`, `curl`, and `awk`.
-# - Relies on environment variables like $TIMESTAMP_FILE, $SNORT_LOG, $MODEL,
-#   $API_ENDPOINT, $API_KEY, $LOG_LINES_TO_SHOW, and $last_analysis.
+# Workflow:
+#   1. Checks log file timestamps for new activity
+#   2. Collects recent entries from both Snort and ntopng logs
+#   3. Submits correlated data to analysis API
+#   4. Processes API response to extract threat information
+#   5. Updates web interface with new analysis
+#   6. Generates PDF report for the analysis session
+#   7. Optionally creates block lists based on threat level
+#   8. Maintains timing markers to prevent duplicate processing
+#
+# API Interaction:
+#   - Uses $ANALYSIS_PROMPT_TEXT for primary analysis
+#   - Uses $BLOCKLIST_PROMPT_TEXT for block list generation
+#   - Handles API errors gracefully with retry logic
+#
+# Concurrency:
+#   - PDF generation and block list creation run in background
+#   - Web interface updates are atomic
 #
 # Outputs:
-# - Creates or updates a web page with the analysis results.
-# - Logs success or error messages to the system log.
+#   - Updates web interface
+#   - Generates PDF reports
+#   - May create new block list files
+# -----------------------------------------------------------------------
 #
 update_analysis() {
     local expires_in="$(decode "$1")" # Web page expiration time in seconds
@@ -689,19 +712,10 @@ update_analysis() {
         fi
 
         # Prepare the API request
+        ANALYSIS_PROMPT_TEXT="${ANALYSIS_PROMPT_TEXT//<insert_date>/$time_now}"
         request_json=$(jq -n \
             --arg model "$MODEL" \
-            --arg system_content "You are an expert cybersecurity analyst. Correlate and fully analyze the following recent logs from Snort and ntopng and provide:
-1. HIGHEST THREAT LEVEL REACHED: Comprises a single word on the next line, either HIGH, MEDIUM, LOW or N/A (for no threat level), indicating the highest threat level reported in the analysis that follows. This will be parsed later by automation.
-2. ASSESSMENT: A succinct summary of the bottom line and a sense of what the urgency is.
-3. THREATS: A prioritized table of threats organized by threat levels (High/Medium/Low), noting which IPs are involved.
-4. TIMELINE: a timeline of the threats, indicating time intervals during which they occurred (include the day of the month in these intervals if not all times are from today, $time_now).
-5. NEXT STEPS: A bulleted list of recommended next steps, including any actions to take and any additional information needed, sorted by priorty with the most urgent coming first.
-6. TECHNICAL DISCUSSION: An advanced-level technical discussion of the threats observed providing relevant technical explanations and background, 
-a technical description of what could explain the occurences, and a technical justification for the prioritization. 
-Please format as HTML for visually appealing web display. Avoid special characters that may not appear properly in the browser. Do not use any Markdown.
-Please use tables with background cell colors denoting priority, with high priority indicated by a background of pale red, medium by pale orange, and low by pale green. 
-Please ensure prioritizations are used consistently for the same items throughout your response." \
+            --arg system_content "$ANALYSIS_PROMPT_TEXT" \
             --arg user_content "$json_log_content. Context: $json_last_analysis" \
             '{
             model: $model,
@@ -773,15 +787,14 @@ Please ensure prioritizations are used consistently for the same items throughou
         # Save the report as a PDF
         save_PDF_report "$highest_threat_level" "$cleaned_analysis" &
 
+
         # Create a list of IPs to block
         # if [[ "$highest_threat_level" == "HIGH" ]] || [[ "$initial_consolidation" == "true" ]]; then
         (
             # Prepare the API request
             request_json=$(jq -n \
                 --arg model "$MODEL" \
-                --arg system_content "You are an expert cybersecurity analyst. Based on the following threat analysis and logs from Snort and ntopng, provide a comprehensive list of
-            external (routable) IP addresses that should be blocked at the firewall level by pfSense.  No internal (non-routable) IP addresses should be included in the list.
-            The list should be formatted as a plain text list of IPs, one per line, with no subnetwork masking (list each IP individually on its own line). Do not respond with any other text or explanation. Please make sure your output is NOT formatted as HTML, Markdown or JSON. It should be strictly plain text." \
+                --arg system_content "$BLOCKLIST_PROMPT_TEXT" \
                 --arg user_content "Threat Analsys: $cleaned_analysis. Logs: $json_log_content" \
                 '{
             model: $model,
@@ -836,23 +849,24 @@ Please ensure prioritizations are used consistently for the same items throughou
 # -----------------------------------------------------------------------
 # Function: calculate_perturbed_interval
 # -----------------------------------------------------------------------
-# Calculates a randomized refresh interval for updating the analysis. This helps
-# to avoid predictable update patterns and increases the randomness of LLM API calls
-# by introducing a perturbation factor.
+# Computes randomized intervals for periodic analysis to prevent predictable
+# patterns in API calls and log processing. Applies jitter to base interval
+# while ensuring reasonable bounds.
 #
-# Steps:
-# 1. Generates a random perturbation factor within a specified range.
-# 2. Multiplies the base update interval by the perturbation factor.
-# 3. Ensures the resulting interval is greater than zero.
+# Algorithm:
+#   - Generates random value in [INTERVAL_PERTURBATION_MIN, INTERVAL_PERTURBATION_MAX]
+#   - Multiplies base UPDATE_INTERVAL by this factor
+#   - Ensures result is positive integer
+#   - Provides sufficient variability while maintaining overall periodicity
 #
-# Dependencies:
-# - Requires the `awk` command-line tool.
-# - Relies on environment variables $INTERVAL_PERTURBATION_MIN, $INTERVAL_PERTURBATION_MAX,
-#   and $UPDATE_INTERVAL.
+# Output:
+#   - Prints calculated interval in seconds to stdout
 #
-# Outputs:
-# - Prints the calculated refresh interval (in seconds) to standard output.
-# Function to update the analysis
+# Notes:
+#   - Helps avoid pattern detection in API usage
+#   - Maintains overall average near UPDATE_INTERVAL
+#   - Uses awk for precise floating point calculations
+# -----------------------------------------------------------------------
 #
 calculate_perturbed_interval() {
     # Generate random perturbation factor between min and max
@@ -869,7 +883,9 @@ calculate_perturbed_interval() {
     echo $perturbed_refresh
 }
 
+# -----------------------------------------------------------------------
 # Main execution performs the following tasks:
+# -----------------------------------------------------------------------
 # 1. Logs the start of the Snort Monitor Service.
 # 2. Starts a web server in the background.
 # 3. Waits for 2 seconds to ensure the web server is initialized.
@@ -890,6 +906,7 @@ calculate_perturbed_interval() {
 # - calculate_perturbed_interval: Computes a randomized interval for the next iteration.
 # - update_analysis: Updates the analysis webpage with new data.
 # - encode: Encodes data for safe usage in the webpage.
+# -----------------------------------------------------------------------
 #
 log "Starting Snort Monitor Service"
 start_web_server &
