@@ -1,6 +1,6 @@
 # LLM-powered-network-threat-monitor
 
-An AI-assisted threat monitoring solution for networks, leveraging Snort, ntopng, pfSense, and LLM analyses to detect, assess and take action in real time against malicious traffic. Integrates automated blacklist generation, implementation of blocking via pfSense / pfBlockerNG, state persistence across runs and service restarts, and comprehensive threat intelligence reporting via a continuously updated webpage and persistent archiving of timestamped PDF reports.
+An AI-assisted threat monitoring solution for networks, leveraging Snort, ntopng, pfSense, pfBlockerNG, and LLM analyses to detect, assess and take action in real time against malicious traffic. Integrates automated blacklist generation, implementation of blocking via pfSense / pfBlockerNG, state persistence across runs and service restarts, and comprehensive threat intelligence reporting via a continuously updated webpage and persistent archiving of timestamped PDF reports.
 
 ## Features
 
