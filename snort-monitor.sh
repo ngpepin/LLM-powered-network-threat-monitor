@@ -85,11 +85,11 @@
 # shellcheck disable=SC2001
 
 # Configuration variables
-SNORT_LOG=""            # Path to the snort log file (sourced from snort-monitor.conf
-NTOPNG_LOG=""           # Path to the ntopng log file (sourced from snort-monitor.conf)
-API_ENDPOINT=""         # OpenAI API endpoint (sourced from snort-monitor.conf)
-API_KEY=""              # OpenAI API key (sourced from snort-monitor.conf)
-MODEL=""                # OpenAI model to use (sourced from snort-monitor.conf)
+SNORT_LOG=""    # Path to the snort log file (sourced from snort-monitor.conf
+NTOPNG_LOG=""   # Path to the ntopng log file (sourced from snort-monitor.conf)
+API_ENDPOINT="" # OpenAI API endpoint (sourced from snort-monitor.conf)
+API_KEY=""      # OpenAI API key (sourced from snort-monitor.conf)
+MODEL=""        # OpenAI model to use (sourced from snort-monitor.conf)
 
 # Override this default prompt text in snort-monitor.conf if you wish:
 ANALYSIS_PROMPT_TEXT="You are an expert cybersecurity analyst. Correlate and fully analyze the following recent logs from Snort and ntopng and provide: 
@@ -105,7 +105,7 @@ Please review these notes before proceeding with the analysis:
 ... provide some network details ...
 b) Format your response as HTML for visually appealing web display. Avoid special characters that may not appear properly in the browser. Do not use any Markdown.
 c) Please use tables with background cell colors denoting priority, with high priority indicated by a background of pale red, medium by pale orange, and low by pale green. 
-d) Ensure prioritizations are used consistently for the same items throughout your response." 
+d) Ensure prioritizations are used consistently for the same items throughout your response."
 
 # Override this default prompt text in snort-monitor.conf if you wish:
 BLOCKLIST_PROMPT_TEXT="You are an expert cybersecurity analyst. Based on the following threat analysis and logs from Snort and ntopng, provide a comprehensive list of external (routable) IP addresses that should be blocked at the firewall level by pfSense.  Please research these IPs to ensure that you are not including in the block list IPs that are controlled by trusted hosts and providers, or essential for accessing ubiquitous services like Microsoft 365 or Gmail.  No internal (non-routable) IP addresses should be included in the list. 
@@ -113,6 +113,7 @@ The list should be formatted as a plain text list of IPs, one per line, with no 
 
 # Source the configuration file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SCRIPT_DIR
 source "$SCRIPT_DIR/snort-monitor.conf"
 
 WEB_DIR="/var/www/snort-monitor"                                         # Directory for web files
@@ -406,11 +407,14 @@ create_webpage() {
     log "Current webpage set to expire in $expire_secs seconds (by $expire_time_str_short)"
 
     # if snort_log_updated_time is 0 or before 2010, then display "n/a"
+    # Check if variable is empty or not a number
     local snort_log_updated_time_str=""
-    if [ "$snort_log_updated_time" -le 1262304000 ]; then
+    if [ -z "$snort_log_updated_time" ]; then
+        snort_log_updated_time_str="n/a"
+    elif [ "$snort_log_updated_time" -le 1262304000 ]; then
         snort_log_updated_time_str="n/a"
     else
-        snort_log_updated_time_str=$(date -d @$snort_log_updated_time '+%Y-%m-%d %H:%M:%S')
+        snort_log_updated_time_str=$(date -d "@$snort_log_updated_time" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "n/a")
     fi
 
     local update_status="<p class='timestamp'> Last analyzed: $update_time"
@@ -781,12 +785,13 @@ update_analysis() {
     date +%s >"$TIMESTAMP_FILE"
 
     # Create the webpage
-    create_webpage "$should_update" "$(encode $expires_in)" "$(encode $cleaned_analysis)" "$(encode $escaped_snort_log_lines)" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
+    # create_webpage "$should_update" "$(encode $expires_in)" "$(encode $cleaned_analysis)" "$(encode $escaped_snort_log_lines)" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
+
+    create_webpage "$should_update" "$(encode $expires_in)" "$(encode $cleaned_analysis)" "$(encode $log_lines)" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
 
     if [ "$should_update" = "true" ]; then
         # Save the report as a PDF
         save_PDF_report "$highest_threat_level" "$cleaned_analysis" &
-
 
         # Create a list of IPs to block
         # if [[ "$highest_threat_level" == "HIGH" ]] || [[ "$initial_consolidation" == "true" ]]; then
