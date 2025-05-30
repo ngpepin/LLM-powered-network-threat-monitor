@@ -469,7 +469,7 @@ create_webpage() {
     $analysis
     
     <br>
-    <div class="section-title">Recent Snort Logs (last $LOG_LINES_TO_SHOW lines):</div>
+    <div class="section-title">Recent Snort and ntopng logs:</div>
     <div class="log-container">
         <div class="log-content">$log_content</div>
     </div>
