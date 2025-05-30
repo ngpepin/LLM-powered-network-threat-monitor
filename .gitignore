@@ -1,9 +1,13 @@
+/*.gitignore
 /*.code-workspace
 /*.conf
 /*.txt
+/velop-status*
+/enumerate-pline*
 /block-lists/
 /bulk-check/
 /consolidated-block-list/
+/open-plc-utils*/
 /misc/
 /mxtoolbox-cache/
 /reports/
