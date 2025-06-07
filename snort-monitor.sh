@@ -705,6 +705,7 @@ update_analysis() {
     local time_now=$(date '+%Y-%m-%d %H:%M:%S')
     local normalized_html=""
     local highest_threat_level="N/A"
+    local blocked_ips=$(paste -sd, "$CONSOLIDATED_FILE")
 
     local should_update="true"
     if [ "$snort_log_updated_time" -le "$last_check" ]; then
@@ -714,7 +715,7 @@ update_analysis() {
 
         # Get snort log content
         log_lines_snort=$(tail -n "$LOG_LINES_TO_SHOW" "$SNORT_LOG")
-
+     
         # resolve ntopng log lines with DNS addresses to IPs (not necessary if ntopng configured to not lookup numerical IPs)
         local temp_ntopng_in_file=$(mktemp)
         local temp_ntopng_out_file=$(mktemp)
@@ -743,7 +744,7 @@ update_analysis() {
         request_json=$(jq -n \
             --arg model "$MODEL" \
             --arg system_content "$ANALYSIS_PROMPT_TEXT" \
-            --arg user_content "$json_log_content. Context: $json_last_analysis" \
+            --arg user_content "$json_log_content. The following IPs have already been blocked and do not need to be addressed: $blocked_ips. Last threat analysis you provided: $json_last_analysis" \
             '{
             model: $model,
             messages: [
@@ -823,7 +824,7 @@ update_analysis() {
             request_json=$(jq -n \
                 --arg model "$MODEL" \
                 --arg system_content "$BLOCKLIST_PROMPT_TEXT" \
-                --arg user_content "Threat Analsys: $cleaned_analysis. Logs: $json_log_content" \
+                --arg user_content "The following IPs have already been blocked and do not need to be provided again: $blocked_ips. Recent threat analysis: $cleaned_analysis. Logs: $json_log_content" \
                 '{
             model: $model,
             messages: [
