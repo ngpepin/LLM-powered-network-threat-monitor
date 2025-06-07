@@ -1,0 +1,15 @@
+[Unit]
+Description=Snort and ntopng Threat Monitoring Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/<your path>/snort-monitor
+ExecStart=/bin/bash /<your path>/snort-monitor.sh
+Restart=always
+RestartSec=5s
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+[Install]
+WantedBy=multi-user.target
