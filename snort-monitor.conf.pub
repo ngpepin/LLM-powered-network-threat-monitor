@@ -1,0 +1,24 @@
+# Configuration variables
+
+BLOCK_LIST_DIR="$SCRIPT_DIR/block-lists"                                 # Directory to store block lists in
+CONSOLIDATED_FILE_SHARE="$SCRIPT_DIR/consolidated-block-list"            # Consolidated block list directory (samba share)
+CONSOLIDATED_FILE="$CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt" # Consolidated block list file
+WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist.txt"                            # IP whitelist file
+REPORTS_DIR="$SCRIPT_DIR/reports"                                        # Directory to store PDF reports in
+WEB_DIR="/var/www/snort-monitor"                                         # Directory for web files
+
+UPDATE_INTERVAL=120                                 # Interval to check for new snort logs (in seconds)
+PFSENSE_DIR="/var/log/pfsense"                      # Directory where pfSense logs are stored
+LOG_DIR="$PFSENSE_DIR/ ..."
+ALT_LOG_DIR="$PFSENSE_DIR/ ... "
+SNORT_LOG="$LOG_DIR/snort.log"
+NTOPNG_LOG="$ALT_LOG_DIR/ntopng.log"
+
+LOCAL_USER_AND_GROUP=" ... "
+
+API_ENDPOINT=' ... '
+API_KEY=" ... "
+MODEL="gpt-4o"
+
+
+

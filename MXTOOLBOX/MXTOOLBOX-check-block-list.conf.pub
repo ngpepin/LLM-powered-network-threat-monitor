@@ -1,0 +1,9 @@
+source "$SCRIPT_DIR/snort-monitor.conf"
+
+timestamp=$(date +"_%Y%m%d_%I%M%P")
+
+CONSOLIDATED_FILE_SHARE="$SCRIPT_DIR/consolidated-block-list"                   # Path to the consolidated block list directory
+CONSOLIDATED_FILE="$CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt"        # Path to the consolidated block list file
+CACHE_FILE="$SCRIPT_DIR/cache-ip-blacklist-status.txt"                          # Path to the cache file
+JSON_CACHE_DIR="$SCRIPT_DIR/mxtoolbox-cache"                                    # Directory for storing raw JSON API responses
+WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist_candidate${timestamp}.txt"  

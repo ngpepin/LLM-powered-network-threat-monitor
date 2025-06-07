@@ -1,0 +1,8 @@
+
+# AbuseIPDB parameters for bulk IP check
+ABUSEIPDB_API_KEY=" ... "
+ABUSEIPDB_REPORT_MAX_AGE=30
+
+# Source the main configuration file
+# SCRIPT_DIR="$(echo "$SCRIPT_DIR" | sed 's#/ABUSEIPDB/*$##')"
+# source "$SCRIPT_DIR/snort-monitor.conf"
