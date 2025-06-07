@@ -1,11 +1,43 @@
 #!/bin/bash
-# resolve-ntopng-log.sh
-# This script resolves domain names in an ntopng log file to their corresponding IP addresses.
-# It reads the log file, resolves domain names using DNS, and writes the output to a specified file.
-# It also caches resolved domain-to-IP mappings to avoid repeated lookups.
-#
-# Usage: ./resolve-ntopng-log.sh <ntopng-log-file> <output-file>
-#
+
+: '
+resolve-ntopng-log.sh
+---------------------
+This script processes an ntopng log file, resolving any domain names found within the log to their corresponding IP addresses using DNS. It outputs a new log file with the resolved IPs in place of domain names. To optimize performance and reduce redundant DNS queries, the script maintains a cache of domain-to-IP mappings, which is periodically purged to prevent excessive growth.
+
+Features:
+- Reads an ntopng log file line by line.
+- Detects domain names (excluding IP addresses and reverse DNS entries).
+- Resolves domains to IPv4 addresses using a configurable DNS server and timeout.
+- Caches resolved domain-to-IP mappings in a file to avoid repeated lookups.
+- Periodically purges the cache after a configurable number of updates.
+- Supports configuration via an external snort-monitor.conf file.
+- Handles file ownership for cache files if LOCAL_USER_AND_GROUP is set.
+
+Usage:
+    ./resolve-ntopng-log.sh <ntopng-log-file> <output-file>
+
+Arguments:
+    <ntopng-log-file>   Path to the input ntopng log file.
+    <output-file>       Path to the output file with resolved IPs (optional; defaults to <ntopng-log-file>-resolved.log).
+
+Configuration:
+- DNS_SERVER: DNS server used for lookups (default: 8.8.8.8).
+- DNS_TIMEOUT: Timeout for DNS queries in seconds (default: 1).
+- CACHE_FILE: Path to the domain-to-IP cache file.
+- CACHE_UPDATE_COUNT_MAX_PURGE: Number of cache updates before purging (default: 200).
+- LOCAL_USER_AND_GROUP: If set, changes ownership of cache files.
+
+Dependencies:
+- bash
+- dig
+- timeout (optional, for DNS query timeout)
+- sudo (optional, for changing file ownership)
+
+Exit Codes:
+- 1: Incorrect usage or missing input file.
+
+'
 
 LOCAL_USER_AND_GROUP=""
 
