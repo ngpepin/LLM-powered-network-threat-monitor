@@ -15,9 +15,7 @@
 /snort-monitor.service
 /pfSense
 /Velop
-/velop-status*
+/velop-*
 /Powerline
 bulk-check/
-~
-/.config/torrentdl
 
