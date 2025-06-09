@@ -3,6 +3,7 @@
 *.conf
 /*.txt
 /*.log
+/*.csv
 /Link*
 /custom-init*
 /resolve_ntopng_cache*

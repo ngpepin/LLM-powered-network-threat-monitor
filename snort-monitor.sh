@@ -116,12 +116,12 @@ BLOCKLIST_PROMPT_TEXT="You are an expert cybersecurity analyst. Based on the fol
 The list should be formatted as a plain text list of IPs, one per line, with no subnetwork masking (list each IP individually on its own line).Do not respond with any other text or explanation. Please make sure your output is NOT formatted as HTML, Markdown or JSON. It should be strictly plain text."
 
 # Provide these default paths in snort-monitor.conf:
-BLOCK_LIST_DIR="<provide in .conf. file>"           # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
-CONSOLIDATED_FILE_SHARE="<provide in .conf. file>"  # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
-CONSOLIDATED_FILE="<provide in .conf. file>"        # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
-WHITELIST_FILE="<provide in .conf. file>"           # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
-REPORTS_DIR="<provide in .conf. file>"              # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
-WEB_DIR="<provide in .conf. file>"                  # e.g., /var/www/snort-monitor                                Directory for web files
+BLOCK_LIST_DIR="<provide in .conf. file>"          # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
+CONSOLIDATED_FILE_SHARE="<provide in .conf. file>" # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
+CONSOLIDATED_FILE="<provide in .conf. file>"       # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
+WHITELIST_FILE="<provide in .conf. file>"          # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
+REPORTS_DIR="<provide in .conf. file>"             # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
+WEB_DIR="<provide in .conf. file>"                 # e.g., /var/www/snort-monitor                                Directory for web files
 
 # Source the configuration file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -134,8 +134,8 @@ else
     echo "Configuration file ${FNAME_CONFIG} not found in $SCRIPT_DIR" >&2
 fi
 
-TIMESTAMP_FILE="/tmp/last_snort_check.time"                              # File to store the last check timestamp
-LOG_FILE="/var/log/snort-monitor.log"                                    # Log file for the script
+TIMESTAMP_FILE="/tmp/last_snort_check.time" # File to store the last check timestamp
+LOG_FILE="/var/log/snort-monitor.log"       # Log file for the script
 
 # Update Interval and Pertubation variables
 INTERVAL_PERTURBATION_MIN=0.8 # Minimum perturbation coefficient for interval
@@ -569,7 +569,7 @@ consolidate_ips() {
     TEMP_VALID_IPS=$(mktemp)
     TEMP_FILTERED_IPS=$(mktemp)
 
-    # Stage 1: Extract all IPs from all block list files 
+    # Stage 1: Extract all IPs from all block list files
     find "$BLOCK_LIST_DIR" -type f -exec grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' {} + | sed 's/.*://' >"$TEMP_ALL_IPS"
 
     # Stage 2: Filter only valid IPs
@@ -715,7 +715,7 @@ update_analysis() {
 
         # Get snort log content
         log_lines_snort=$(tail -n "$LOG_LINES_TO_SHOW" "$SNORT_LOG")
-     
+
         # resolve ntopng log lines with DNS addresses to IPs (not necessary if ntopng configured to not lookup numerical IPs)
         local temp_ntopng_in_file=$(mktemp)
         local temp_ntopng_out_file=$(mktemp)
@@ -758,8 +758,10 @@ update_analysis() {
                 }
             ],
             temperature: 0.7,
-            max_tokens: 99000 
+            max_tokens: 64000 
         }')
+
+         echo "Last request JSON for Analysis: $request_json" > "$SCRIPT_DIR/last_analysis_request.log"
 
         # Call the API with a request for an analysis
         response=$(curl -s -X POST "$API_ENDPOINT" \
@@ -838,8 +840,11 @@ update_analysis() {
                 }
             ],
             temperature: 0.1,
-            max_tokens: 99000 
+            max_tokens: 64000 
         }')
+
+            echo "Last request JSON for blocked IPs: $request_json" > "$SCRIPT_DIR/llast_IP_request.log"
+
             response=$(curl -s -X POST "$API_ENDPOINT" \
                 -H "Content-Type: application/json" \
                 -H "Authorization: Bearer $API_KEY" \
