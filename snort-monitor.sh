@@ -92,8 +92,10 @@ API_KEY=""      # OpenAI API key (sourced from snort-monitor.conf)
 MODEL=""        # OpenAI model to use (sourced from snort-monitor.conf)
 
 # Default configuration variables that can be overridden in snort-monitor.conf
-UPDATE_INTERVAL=600     # Interval to check for new logs (in seconds)
-LOCAL_USER_AND_GROUP="" # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
+UPDATE_INTERVAL=600 # Interval to check for new logs (in seconds)
+AUTO_UPDATE_WHITELIST_BOOL=false
+AUTO_UPDATE_WHITELIST_CYCLES=6 # Number of cycles to auto-update the whitelist (default 10)
+LOCAL_USER_AND_GROUP=""        # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 
 # Override this default prompt text in snort-monitor.conf if you wish:
 ANALYSIS_PROMPT_TEXT="You are an expert cybersecurity analyst. Correlate and fully analyze the following recent logs from Snort and ntopng and provide: 
@@ -116,12 +118,12 @@ BLOCKLIST_PROMPT_TEXT="You are an expert cybersecurity analyst. Based on the fol
 The list should be formatted as a plain text list of IPs, one per line, with no subnetwork masking (list each IP individually on its own line).Do not respond with any other text or explanation. Please make sure your output is NOT formatted as HTML, Markdown or JSON. It should be strictly plain text."
 
 # Provide these default paths in snort-monitor.conf:
-BLOCK_LIST_DIR="<provide in .conf. file>"          # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
-CONSOLIDATED_FILE_SHARE="<provide in .conf. file>" # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
-CONSOLIDATED_FILE="<provide in .conf. file>"       # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
-WHITELIST_FILE="<provide in .conf. file>"          # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
-REPORTS_DIR="<provide in .conf. file>"             # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
-WEB_DIR="<provide in .conf. file>"                 # e.g., /var/www/snort-monitor                                Directory for web files
+BLOCK_LIST_DIR="<provide BLOCK_LIST_DIR in .conf. file>"                   # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
+CONSOLIDATED_FILE_SHARE="<provide CONSOLIDATED_FILE_SHARE in .conf. file>" # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
+CONSOLIDATED_FILE="<provide ONSOLIDATED_FILE in .conf. file>"              # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
+WHITELIST_FILE="<provide WHITELIST_FILE in .conf. file>"                   # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
+REPORTS_DIR="<provide REPORTS_DIR in .conf. file>"                         # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
+WEB_DIR="<provide WEB_DIR in .conf. file>"                                  # e.g., /var/www/snort-monitor                               Directory for web files
 
 # Source the configuration file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -726,16 +728,16 @@ update_analysis() {
         rm -f "$temp_ntopng_in_file" "$temp_ntopng_out_file"
 
         log_lines=$(
-            echo "Snort logs:"
+            echo "Snort logs:\n"
             echo "$log_lines_snort"
-            echo "ntopng logs:"
+            echo "ntopng logs:\n"
             echo "$log_lines_ntopng"
         )
         escaped_snort_log_lines=$(echo "$log_lines_snort" | escape_html)
-        json_log_content=$(echo "$log_lines" | escape_json)
+        json_log_content=$(echo "$log_lines" | escape_json | tr -s ' ')
         json_last_analysis=""
         if [ -n "$last_analysis" ]; then
-            json_last_analysis="This is the last analysis you provided.  Please review it and use it as a guide for identifying patterns and making prioritizations and formating consistent over time: "
+            json_last_analysis="\nThis is the last analysis you provided.  Please review it and use it as a guide for identifying patterns and making prioritizations and formating consistent over time:\n"
             json_last_analysis+=$(echo "$last_analysis" | escape_json)
         fi
 
@@ -744,7 +746,10 @@ update_analysis() {
         request_json=$(jq -n \
             --arg model "$MODEL" \
             --arg system_content "$ANALYSIS_PROMPT_TEXT" \
-            --arg user_content "$json_log_content. The following IPs have already been blocked and do not need to be addressed: $blocked_ips. Last threat analysis you provided: $json_last_analysis" \
+            --arg user_content "$json_log_content.  
+            \nSUPPORTING MATERIALS:
+            $json_last_analysis. 
+            The following IPs have already been blocked: $blocked_ips." \
             '{
             model: $model,
             messages: [
@@ -758,10 +763,10 @@ update_analysis() {
                 }
             ],
             temperature: 0.7,
-            max_tokens: 64000 
+            max_tokens: 120000 
         }')
 
-         echo "Last request JSON for Analysis: $request_json" > "$SCRIPT_DIR/last_analysis_request.log"
+        echo "Last request JSON for Analysis:\n $request_json" >"$SCRIPT_DIR/last_analysis_request.log"
 
         # Call the API with a request for an analysis
         response=$(curl -s -X POST "$API_ENDPOINT" \
@@ -786,6 +791,7 @@ update_analysis() {
             error="API Connection Failed [$?]"
             should_update="false"
         fi
+        echo "Last response JSON for Analysis:\n $(response | tr -s ' ')" >"$SCRIPT_DIR/last_analysis_response.log"
     fi
 
     # Extract the threat level
@@ -822,33 +828,33 @@ update_analysis() {
         # Create a list of IPs to block
         # if [[ "$highest_threat_level" == "HIGH" ]] || [[ "$initial_consolidation" == "true" ]]; then
         (
-            # Prepare the API request
-            request_json=$(jq -n \
-                --arg model "$MODEL" \
-                --arg system_content "$BLOCKLIST_PROMPT_TEXT" \
-                --arg user_content "The following IPs have already been blocked and do not need to be provided again: $blocked_ips. Recent threat analysis: $cleaned_analysis. Logs: $json_log_content" \
-                '{
-            model: $model,
-            messages: [
-                {
-                    role: "system",
-                    content: $system_content
-                },
-                {
-                    role: "user",
-                    content: $user_content
-                }
-            ],
-            temperature: 0.1,
-            max_tokens: 64000 
-        }')
+            request_json=$(
+                jq -n \
+                    --arg model "$MODEL" \
+                    --arg system_content "$BLOCKLIST_PROMPT_TEXT" \
+                    --arg user_content "SUPPORTING MATERIALS:
+Here is a recent threat analysis: $(echo $cleaned_analysis | tr -s ' ') \n
+Here are some recent Snort and ntopng logs: $json_log_content \n
+The following IPs have already been blocked: $blocked_ips" \
+                    '{
+                 model: $model,
+                 messages: [
+                   {role: "system", content: $system_content},
+                   {role: "user",   content: $user_content}
+                 ],
+                 temperature: 0.1,
+                 max_tokens: 120000
+               }'
+            )
 
-            echo "Last request JSON for blocked IPs: $request_json" > "$SCRIPT_DIR/llast_IP_request.log"
+            echo "Last request JSON for blocked IPs:\n $request_json" >"$SCRIPT_DIR/last_IPs_to_block_request.log"
 
             response=$(curl -s -X POST "$API_ENDPOINT" \
                 -H "Content-Type: application/json" \
                 -H "Authorization: Bearer $API_KEY" \
                 -d "$request_json")
+
+            echo "Last response JSON for blocked IPs:\n $(response | tr -s ' ')" >"$SCRIPT_DIR/last_IPs_to_block_response.log"
 
             if [ $? -eq 0 ]; then
                 if [[ "$response" == *"error"* ]]; then
@@ -967,6 +973,8 @@ log "Starting block list web server on port $BLOCK_LIST_WEB_PORT"
 share_block_list_via_HTTP &
 
 # Main loop
+# initialize counter variable
+auto_update_whitelist=0
 while true; do
     if $first_time; then
         first_time=false
@@ -978,6 +986,15 @@ while true; do
     fi
 
     update_analysis "$(encode $expiration_time)"
+
+    ((auto_update_whitelist++))
+    if ((auto_update_whitelist >= AUTO_UPDATE_WHITELIST_CYCLES)); then
+        if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
+            log "Auto-updating whitelist"
+            $SCRIPT_DIR/auto-update-whitelist.sh &
+        fi
+        auto_update_whitelist=0
+    fi
 
     sleep "$perturbed_interval"
 done

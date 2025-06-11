@@ -1,43 +1,42 @@
 #!/bin/bash
 
-: '
-resolve-ntopng-log.sh
----------------------
-This script processes an ntopng log file, resolving any domain names found within the log to their corresponding IP addresses using DNS. It outputs a new log file with the resolved IPs in place of domain names. To optimize performance and reduce redundant DNS queries, the script maintains a cache of domain-to-IP mappings, which is periodically purged to prevent excessive growth.
 
-Features:
-- Reads an ntopng log file line by line.
-- Detects domain names (excluding IP addresses and reverse DNS entries).
-- Resolves domains to IPv4 addresses using a configurable DNS server and timeout.
-- Caches resolved domain-to-IP mappings in a file to avoid repeated lookups.
-- Periodically purges the cache after a configurable number of updates.
-- Supports configuration via an external snort-monitor.conf file.
-- Handles file ownership for cache files if LOCAL_USER_AND_GROUP is set.
+# resolve-ntopng-log.sh
+# ---------------------
+# This script processes an ntopng log file, resolving any domain names found within the log to their corresponding IP addresses using DNS. It outputs a new log file with the resolved IPs in place of domain names. To optimize performance and reduce redundant DNS queries, the script maintains a cache of domain-to-IP mappings, which is periodically purged to prevent excessive growth.
+#
+# Features:
+# - Reads an ntopng log file line by line.
+# - Detects domain names (excluding IP addresses and reverse DNS entries).
+# - Resolves domains to IPv4 addresses using a configurable DNS server and timeout.
+# - Caches resolved domain-to-IP mappings in a file to avoid repeated lookups.
+# - Periodically purges the cache after a configurable number of updates.
+# - Supports configuration via an external snort-monitor.conf file.
+# - Handles file ownership for cache files if LOCAL_USER_AND_GROUP is set.
+#
+# Usage:
+#     ./resolve-ntopng-log.sh <ntopng-log-file> <output-file>
+#
+# Arguments:
+#     <ntopng-log-file>   Path to the input ntopng log file.
+#     <output-file>       Path to the output file with resolved IPs (optional; defaults to <ntopng-log-file>-resolved.log).
+#
+# Configuration:
+# - DNS_SERVER: DNS server used for lookups (default: 8.8.8.8).
+# - DNS_TIMEOUT: Timeout for DNS queries in seconds (default: 1).
+# - CACHE_FILE: Path to the domain-to-IP cache file.
+# - CACHE_UPDATE_COUNT_MAX_PURGE: Number of cache updates before purging (default: 200).
+# - LOCAL_USER_AND_GROUP: If set, changes ownership of cache files.
+#
+# Dependencies:
+# - bash
+# - dig
+# - timeout (optional, for DNS query timeout)
+# - sudo (optional, for changing file ownership)
+#
+# Exit Codes:
+# - 1: Incorrect usage or missing input file.
 
-Usage:
-    ./resolve-ntopng-log.sh <ntopng-log-file> <output-file>
-
-Arguments:
-    <ntopng-log-file>   Path to the input ntopng log file.
-    <output-file>       Path to the output file with resolved IPs (optional; defaults to <ntopng-log-file>-resolved.log).
-
-Configuration:
-- DNS_SERVER: DNS server used for lookups (default: 8.8.8.8).
-- DNS_TIMEOUT: Timeout for DNS queries in seconds (default: 1).
-- CACHE_FILE: Path to the domain-to-IP cache file.
-- CACHE_UPDATE_COUNT_MAX_PURGE: Number of cache updates before purging (default: 200).
-- LOCAL_USER_AND_GROUP: If set, changes ownership of cache files.
-
-Dependencies:
-- bash
-- dig
-- timeout (optional, for DNS query timeout)
-- sudo (optional, for changing file ownership)
-
-Exit Codes:
-- 1: Incorrect usage or missing input file.
-
-'
 
 LOCAL_USER_AND_GROUP=""
 
@@ -55,8 +54,8 @@ DNS_SERVER="8.8.8.8"                              # DNS Server used for resoluti
 DNS_TIMEOUT=1                                     # seconds for DNS resolution timeout
 IN_FILE="$1"                                      # Input ntopng log file
 OUT_FILE="$2"                                     # Output ntopng log formatted file with resolved entries
-CACHE_FILE="$SCRIPT_DIR/resolve_ntopng_cache.txt" # Cache file for domain-to-IP mappings
-CACHE_UPDATE_COUNT_FILE="$SCRIPT_DIR/resolve_ntopng_cache_updated.txt"
+CACHE_FILE="$SCRIPT_DIR/cache-resolve-ntopng.txt" # Cache file for domain-to-IP mappings
+CACHE_UPDATE_COUNT_FILE="$SCRIPT_DIR/cache-resolve-ntopng-updated.txt"
 CACHE_UPDATE_COUNT=0             # Counter for cache refreshes
 CACHE_UPDATE_COUNT_MAX_PURGE=200 # Maximum number of cache refreshes before purging cache contents
 

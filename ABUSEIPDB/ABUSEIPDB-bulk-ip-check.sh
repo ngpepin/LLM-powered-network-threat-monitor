@@ -1,38 +1,38 @@
 #!/bin/bash
-: '
-bulk-ip-check.sh - Bulk IP Reputation Checker using AbuseIPDB API
+#
+# bulk-ip-check.sh - Bulk IP Reputation Checker using AbuseIPDB API
+#
+# This script checks a list of IP addresses against the AbuseIPDB API and outputs their reputation data to a CSV file.
+#
+# Usage:
+#     ./bulk-ip-check.sh <ip_file> <output_path>
+#
+# Arguments:
+#     ip_file      Path to a file containing one IP address per line.
+#     output_path  Path to the output CSV file.
+#
+# Configuration:
+#     - The script expects a configuration file named "snort-monitor.conf" in the same directory.
+#     - The configuration file can override the following variables:
+#             ABUSEIPDB_API_KEY         # Your AbuseIPDB API key (must be exactly 80 characters)
+#             ABUSEIPDB_REPORT_MAX_AGE  # Max age in days for reports (default: 30)
+#
+# Prerequisites:
+#     - jq: Command-line JSON processor (install with: sudo apt-get install jq)
+#     - curl: Command-line tool for making HTTP requests
+#
+# Features:
+#     - Validates input arguments and configuration.
+#     - Checks each IP address using the AbuseIPDB API.
+#     - Outputs results in CSV format with the following columns:
+#             IP Address, % Confidence of Abuse, Total Reports within N days, ISP, Country Code, Domain, Distinct Users Reporting, Last Reported At
+#     - Handles and logs API errors per IP.
+#     - Removes temporary files after execution.
+#
+# Notes:
+#     - Ensure your AbuseIPDB API key is kept secure and not hardcoded in public scripts.
+#     - The script will overwrite the output file if it already exists.
 
-This script checks a list of IP addresses against the AbuseIPDB API and outputs their reputation data to a CSV file.
-
-Usage:
-    ./bulk-ip-check.sh <ip_file> <output_path>
-
-Arguments:
-    ip_file      Path to a file containing one IP address per line.
-    output_path  Path to the output CSV file.
-
-Configuration:
-    - The script expects a configuration file named "snort-monitor.conf" in the same directory.
-    - The configuration file can override the following variables:
-            ABUSEIPDB_API_KEY         # Your AbuseIPDB API key (must be exactly 80 characters)
-            ABUSEIPDB_REPORT_MAX_AGE  # Max age in days for reports (default: 30)
-
-Prerequisites:
-    - jq: Command-line JSON processor (install with: sudo apt-get install jq)
-    - curl: Command-line tool for making HTTP requests
-
-Features:
-    - Validates input arguments and configuration.
-    - Checks each IP address using the AbuseIPDB API.
-    - Outputs results in CSV format with the following columns:
-            IP Address, % Confidence of Abuse, Total Reports within N days, ISP, Country Code, Domain, Distinct Users Reporting, Last Reported At
-    - Handles and logs API errors per IP.
-    - Removes temporary files after execution.
-
-Notes:
-    - Ensure your AbuseIPDB API key is kept secure and not hardcoded in public scripts.
-    - The script will overwrite the output file if it already exists.
-'
 # Arguments
 IP_FILE="$1"
 OUTPUT_PATH="$2"

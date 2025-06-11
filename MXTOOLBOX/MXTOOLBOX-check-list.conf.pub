@@ -1,0 +1,9 @@
+source "$SCRIPT_DIR/snort-monitor.conf"
+
+timestamp=$(date +"_%Y%m%d_%I%M%P")
+CACHE_FILE="$SCRIPT_DIR/cache-ip-blacklist-status.txt"                          # Path to the cache file
+DNS_CACHE_FILE="$SCRIPT_DIR/cache-dns.txt"                                      # Path to the DNS cache file
+JSON_CACHE_DIR="$SCRIPT_DIR/mxtoolbox-cache"                                    # Directory for storing raw JSON API responses                                             # Path to the whitelist file
+WHITELIST_CANDIDATE_FILE="$SCRIPT_DIR/ip-whitelist_candidate${timestamp}.txt"   # Path to the candidate whitelist file
+WHITELIST_CANDIDATE_DELTA_FILE="$SCRIPT_DIR/ip-whitelist_delta_candidate${timestamp}.txt"   
+WHOIS_CACHE_FILE="$SCRIPT_DIR/cache-whois.txt"                                  # Path to the WHOIS cache file
