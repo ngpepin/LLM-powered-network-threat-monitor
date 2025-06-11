@@ -123,7 +123,7 @@ CONSOLIDATED_FILE_SHARE="<provide CONSOLIDATED_FILE_SHARE in .conf. file>" # e.g
 CONSOLIDATED_FILE="<provide ONSOLIDATED_FILE in .conf. file>"              # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
 WHITELIST_FILE="<provide WHITELIST_FILE in .conf. file>"                   # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
 REPORTS_DIR="<provide REPORTS_DIR in .conf. file>"                         # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
-WEB_DIR="<provide WEB_DIR in .conf. file>"                                  # e.g., /var/www/snort-monitor                               Directory for web files
+WEB_DIR="<provide WEB_DIR in .conf. file>"                                 # e.g., /var/www/snort-monitor                               Directory for web files
 
 # Source the configuration file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -695,6 +695,7 @@ update_analysis() {
     local analysis=""
     local cleaned_analysis=""
     local cleaned_response=""
+    local response_no_extra_spaces=""
     local error=""
     local escaped_snort_log_lines=""
     local json_last_analysis=""
@@ -774,6 +775,9 @@ update_analysis() {
             -H "Authorization: Bearer $API_KEY" \
             -d "$request_json")
 
+        response_no_extra_spaces=$(echo "$response" | tr -s ' ')
+        printf "Last response JSON for Analysis:\n%s\n" "$response_no_extra_spaces" >"$SCRIPT_DIR/last_analysis_response.log"
+        
         # Handle response
         if [ $? -eq 0 ]; then
             if [[ "$response" == *"error"* ]]; then
@@ -791,7 +795,7 @@ update_analysis() {
             error="API Connection Failed [$?]"
             should_update="false"
         fi
-        echo "Last response JSON for Analysis:\n $(response | tr -s ' ')" >"$SCRIPT_DIR/last_analysis_response.log"
+
     fi
 
     # Extract the threat level
@@ -854,7 +858,8 @@ The following IPs have already been blocked: $blocked_ips" \
                 -H "Authorization: Bearer $API_KEY" \
                 -d "$request_json")
 
-            echo "Last response JSON for blocked IPs:\n $(response | tr -s ' ')" >"$SCRIPT_DIR/last_IPs_to_block_response.log"
+            response_no_extra_spaces=$(echo "$response" | tr -s ' ')
+            printf "Last response JSON for blocked IPs:\n%s\n" "$response_no_extra_spaces" >"$SCRIPT_DIR/last_IPs_to_block_response.log"
 
             if [ $? -eq 0 ]; then
                 if [[ "$response" == *"error"* ]]; then
