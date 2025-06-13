@@ -98,24 +98,46 @@ AUTO_UPDATE_WHITELIST_CYCLES=6 # Number of cycles to auto-update the whitelist (
 LOCAL_USER_AND_GROUP=""        # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 
 # Override this default prompt text in snort-monitor.conf if you wish:
-ANALYSIS_PROMPT_TEXT="You are an expert cybersecurity analyst. Correlate and fully analyze the following recent logs from Snort and ntopng and provide: 
-1. HIGHEST THREAT LEVEL REACHED: Comprises a single word on the next line, either HIGH, MEDIUM, LOW or N/A (for no threat level), indicating the 
-highest threat level reported in the analysis that follows. This will be parsed later by automation. 
-2. ASSESSMENT: A succinct summary of the bottom line and a sense of what the urgency is. 
-3. THREATS: A prioritized table of threats organized by threat levels (High/Medium/Low), noting which IPs are involved.
-4. TIMELINE: a timeline of the threats, indicating time intervals during which they occurred. Include the day of the month in these intervals if not all times are from today <insert_date>.
-5. NEXT STEPS: A bulleted list of recommended next steps, including any actions to take and any additional information needed, sorted by priority with the most urgent coming first.
-6. TECHNICAL DISCUSSION: An advanced-level technical discussion of the threats observed, providing relevant technical explanations and background, 
-as well as technical justifications for the prioritization. 
-Please review these notes before proceeding with the analysis:
-... provide some network details ...
-b) Format your response as HTML for visually appealing web display. Avoid special characters that may not appear properly in the browser. Do not use any Markdown.
-c) Please use tables with background cell colors denoting priority, with high priority indicated by a background of pale red, medium by pale orange, and low by pale green. 
-d) Ensure prioritizations are used consistently for the same items throughout your response."
+read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
+Role: You are an expert cybersecurity analyst.
+Task: Analyze Snort/ntopng logs and provide a structured threat report.
+Output Requirements using these section headings:
+1. HIGHEST THREAT LEVEL REACHED
+   Format: Single word (HIGH/MEDIUM/LOW/N/A) on its own line.
+   Purpose: For automated parsing.
+2. ASSESSMENT
+   Content: A succinct but analytically advanced summary of urgency and bottom-line impact (3-4 sentences).
+3. THREATS
+   Format: Prioritized HTML table with colored cells (High=pale-red, Medium=pale-orange, Low=pale-green).
+   Rules:
+   - Explicitly list all IPs or domain names of concern; don't use 'e.g.' or shortcut phrases like 'and other IPs' as a way of skipping a complete enumeration.
+   Columns: Threat Level, IP(s), Traffic Type, Justification.
+4. TIMELINE
+   Format: HTML table with time intervals (include day/month if not today).
+5. NEXT STEPS
+   Format: HTML bulleted list, priority-ordered (urgent first).
+6. TECHNICAL DISCUSSION
+   Content: Advanced and detailed technical analysis organized using the WASC threat classification and including advisory references.
+   The goal is to educate an advanced reader on the nature of the threats and how they can be mitigated. Provide longer and more detailed description to advance this objective.
+Styling & Compliance:
+   Output Format: HTML only (no Markdown/JSON).
+   Tables: Use pale red/orange/green backgrounds for High/Medium/Low.
+   Consistency: Align threat levels across all sections.
+EOF
 
 # Override this default prompt text in snort-monitor.conf if you wish:
-BLOCKLIST_PROMPT_TEXT="You are an expert cybersecurity analyst. Based on the following threat analysis and logs from Snort and ntopng, provide a comprehensive list of external (routable) IP addresses that should be blocked at the firewall level by pfSense.  Please research these IPs to ensure that you are not including in the block list IPs that are controlled by trusted hosts and providers, or essential for accessing ubiquitous services like Microsoft 365 or Gmail.  No internal (non-routable) IP addresses should be included in the list. 
-The list should be formatted as a plain text list of IPs, one per line, with no subnetwork masking (list each IP individually on its own line).Do not respond with any other text or explanation. Please make sure your output is NOT formatted as HTML, Markdown or JSON. It should be strictly plain text."
+read -r -d '' BLOCKLIST_PROMPT_TEXT <<'EOF'
+Role: You are an expert cybersecurity analyst.
+Task: Generate a plain-text block list of external (routable) IP addresses for pfSense pfBlockerNG based on Snort/ntopng logs.
+Requirements:
+1. Scope: Only include external, routable IPs. 
+2. Validation: Research each IP to avoid blocking trusted providers (e.g., Microsoft 365, Gmail).
+3. Format: Plain text, one IP per line. No subnet masks, headers, or explanations.
+4. Output Restrictions: No HTML/Markdown/JSON. Only raw IPs.
+Example Output:
+203.0.113.45
+198.51.100.10
+EOF
 
 # Provide these default paths in snort-monitor.conf:
 BLOCK_LIST_DIR="<provide BLOCK_LIST_DIR in .conf. file>"                   # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
@@ -145,10 +167,10 @@ INTERVAL_PERTURBATION_MAX=1.4 # Maximum perturbation coefficient for interval
 WEBPAGE_EXPIRATION_GRACE=10   # Grace period for webpage expiration allowing LLM API query/ies to take place (in seconds)
 
 # Web server configuration
-WEB_PORT=9999              # Port for the Analysis web server
-LOG_LINES_TO_SHOW=120      # Number of log lines to provide to the LLM and show on the webpage
-BLOCK_LIST_WEB_PORT=9998   # Port for the Block List web server
-DELETE_BLOCK_LISTS_AFTER=5 # Number of days to keep the block list files before deleting them
+WEB_PORT=9999                  # Port for the Analysis web server
+LOG_LINES_TO_SHOW=120          # Number of log lines to provide to the LLM and show on the webpage
+BLOCK_LIST_WEB_PORT=9998       # Port for the Block List web server
+DELETE_BLOCK_LISTS_AFTER=99999 # Number of days to keep the block list files before deleting them
 
 # Execute custom initialization code if exists
 if [[ -f "$SCRIPT_DIR/custom-init.sh" ]]; then
@@ -637,7 +659,6 @@ start_monitor() {
                 find "$BLOCK_LIST_DIR" -type f -mtime +"$DELETE_BLOCK_LISTS_AFTER" -delete -print | while read -r deleted_file; do
                     log "Deleted old file: $deleted_file"
                 done
-
                 consolidate_ips
             fi
         done
