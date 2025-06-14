@@ -667,7 +667,38 @@ start_monitor() {
 # Cleanup function
 cleanup() {
     kill "$MONITOR_PID" 2>/dev/null
-    echo "$(date) - Stopped block list monitor" >>"$LOG_FILE"
+    kill "$WHITELIST_UPDATER_PID" 2>/dev/null
+    kill "$BLOCK_LIST_SERVER_PID" 2>/dev/null
+    kill "$WEB_SERVER_PID" 2>/dev/null
+    sleep 2
+
+    # Check if the processes are still running
+    if ps -p "$MONITOR_PID" >/dev/null; then
+        log "Monitor process is still running, stopping it..."
+        kill -9 "$MONITOR_PID"
+    fi
+    if ps -p "$WHITELIST_UPDATER_PID" >/dev/null; then
+        log "Whitelist updater process is still running, stopping it..."
+        kill -9 "$WHITELIST_UPDATER_PID"
+    fi
+    if ps -p "$BLOCK_LIST_SERVER_PID" >/dev/null; then
+        log "Block list server process is still running, stopping it..."
+        kill -9 "$BLOCK_LIST_SERVER_PID"
+    fi
+    if ps -p "$WEB_SERVER_PID" >/dev/null; then
+        log "Web server process is still running, stopping it..."
+        kill -9 "$WEB_SERVER_PID"
+    fi
+    sleep 2
+    if ! ps -p "$MONITOR_PID" >/dev/null &&
+        ! ps -p "$WHITELIST_UPDATER_PID" >/dev/null &&
+        ! ps -p "$BLOCK_LIST_SERVER_PID" >/dev/null &&
+        ! ps -p "$WEB_SERVER_PID" >/dev/null; then
+        log "All background processes stopped successfully"
+    else
+        log "Some background processes failed to stop"
+    fi
+    log "**************** Exiting Snort Monitor Service ****************"
     exit 0
 }
 
@@ -995,37 +1026,40 @@ update_whitelist_runner() {
 # - encode: Encodes data for safe usage in the webpage.
 # -----------------------------------------------------------------------
 #
-log "Starting Snort Monitor Service"
+log "**************** Starting Snort Monitor Service ****************"
+log "Starting alert web server on port $WEB_PORT"
 start_web_server &
+ALERT_WEB_SERVER_PID=$!
 sleep 2
-
 create_webpage "false" "$(encode $WEBPAGE_EXPIRATION_GRACE)" "$(encode "Waiting for the first log analysis...")" "$(encode "Waiting for the first log analysis...")" "" "" ""
 
-first_time=true
-
 # Initial block list consolidation
+first_time=true
 consolidate_ips
 
+# Start the whitelist updater in background
 update_whitelist_runner &
+WHITELIST_UPDATER_PID=$!
 
-# Start the monitor in background
+# Start the log monitor in background
 start_monitor >/dev/null 2>&1 &
 MONITOR_PID=$!
 
-# Trap script exit to kill the monitor
-trap cleanup EXIT
-
-log "Block list monitor running (PID: $MONITOR_PID)"
-log "Consolidated output: $CONSOLIDATED_FILE"
-
 log "Starting block list web server on port $BLOCK_LIST_WEB_PORT"
 share_block_list_via_HTTP &
+BLOCK_LIST_WEB_SERVER_PID=$!
 
-bg_pid=$!
-echo "Started whitelist updater process (PID=$bg_pid); it will run an update at 1 AM every day."
+# Trap script exit to kill all background processes
+trap cleanup EXIT
+
+log "Alert Web server started with PID: $ALERT_WEB_SERVER_PID"
+log "Block list monitor running (PID: $MONITOR_PID)"
+log "Whitelist updater running (PID: $WHITELIST_UPDATER_PID)"
+log "Block list web server running (PID: $BLOCK_LIST_WEB_SERVER_PID)"
+log "Whitelist file: $WHITELIST_FILE"
+log "Block-list file: $CONSOLIDATED_FILE"
 
 # Main loop
-# initialize counter variable
 while true; do
     if $first_time; then
         first_time=false
@@ -1037,6 +1071,5 @@ while true; do
     fi
 
     update_analysis "$(encode $expiration_time)"
-
     sleep "$perturbed_interval"
 done
