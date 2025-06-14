@@ -93,9 +93,9 @@ MODEL=""        # OpenAI model to use (sourced from snort-monitor.conf)
 
 # Default configuration variables that can be overridden in snort-monitor.conf
 UPDATE_INTERVAL=600 # Interval to check for new logs (in seconds)
-AUTO_UPDATE_WHITELIST_BOOL=false
-AUTO_UPDATE_WHITELIST_CYCLES=6 # Number of cycles to auto-update the whitelist (default 10)
-LOCAL_USER_AND_GROUP=""        # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
+AUTO_UPDATE_WHITELIST_BOOL=true
+AUTO_UPDATE_HOUR="01:00" # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
+LOCAL_USER_AND_GROUP=""  # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 
 # Override this default prompt text in snort-monitor.conf if you wish:
 read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
@@ -798,7 +798,7 @@ update_analysis() {
 
         response_no_extra_spaces=$(echo "$response" | tr -s ' ')
         printf "Last response JSON for Analysis:\n%s\n" "$response_no_extra_spaces" >"$SCRIPT_DIR/last_analysis_response.log"
-        
+
         # Handle response
         if [ $? -eq 0 ]; then
             if [[ "$response" == *"error"* ]]; then
@@ -949,6 +949,27 @@ calculate_perturbed_interval() {
     echo $perturbed_refresh
 }
 
+update_whitelist_runner() {
+    # Background loop running task at AUTO_UPDATE_HOUR daily
+
+    if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
+        local script_output=""
+        while true; do
+            # Calculate now and next AUTO_UPDATE_HOUR
+            now=$(date +%s)
+            target=$(date -d "today $AUTO_UPDATE_HOUR" +%s)
+            if ((now >= target)); then
+                target=$(date -d "tomorrow $AUTO_UPDATE_HOUR" +%s)
+            fi
+            sleep $((target - now))
+
+            log "Auto-updating whitelist now"
+            script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
+            log "Whitelist update script output: $script_output"
+        done
+    fi
+}
+
 # -----------------------------------------------------------------------
 # Main execution performs the following tasks:
 # -----------------------------------------------------------------------
@@ -985,6 +1006,8 @@ first_time=true
 # Initial block list consolidation
 consolidate_ips
 
+update_whitelist_runner &
+
 # Start the monitor in background
 start_monitor >/dev/null 2>&1 &
 MONITOR_PID=$!
@@ -998,9 +1021,11 @@ log "Consolidated output: $CONSOLIDATED_FILE"
 log "Starting block list web server on port $BLOCK_LIST_WEB_PORT"
 share_block_list_via_HTTP &
 
+bg_pid=$!
+echo "Started whitelist updater process (PID=$bg_pid); it will run an update at 1 AM every day."
+
 # Main loop
 # initialize counter variable
-auto_update_whitelist=0
 while true; do
     if $first_time; then
         first_time=false
@@ -1012,15 +1037,6 @@ while true; do
     fi
 
     update_analysis "$(encode $expiration_time)"
-
-    ((auto_update_whitelist++))
-    if ((auto_update_whitelist >= AUTO_UPDATE_WHITELIST_CYCLES)); then
-        if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
-            log "Auto-updating whitelist"
-            $SCRIPT_DIR/auto-update-whitelist.sh &
-        fi
-        auto_update_whitelist=0
-    fi
 
     sleep "$perturbed_interval"
 done

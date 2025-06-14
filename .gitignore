@@ -20,3 +20,5 @@
 /Powerline
 bulk-check/
 
+force-pfsense-ntopng-update.sh
+ip-whitelist_latest.csv
