@@ -90,7 +90,7 @@ mkdir -p "$JSON_CACHE_DIR" 2>/dev/null
 #     - Outputs a summary of the blacklist status.
 #
 # Output:
-#     - Prints the blacklist status to stdout, prefixed with "Fresh:" if newly queried.
+#     - Prints the blacklist status to stdout, prefixed with "Fresh :" if newly queried.
 #     - Status can be "BLACKLISTED on <list>", "CLEAN", or an error message.
 #
 # Dependencies:
@@ -155,14 +155,14 @@ check_mxtoolbox_blacklists() {
             echo "$name" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]' | cut -c1-6
         done | paste -sd "," -)
         echo "$ip|$now|BLACKLISTED|$bl_abbrs" >>"$CACHE_FILE"
-        echo "Fresh: BLACKLISTED by $(echo "$bl_abbrs" | sed 's/,/, /g')"
+        echo "Fresh : BLACKLISTED by $(echo "$bl_abbrs" | sed 's/,/, /g')"
     elif [[ "$status_string" == "CLEAN" ]]; then
         echo "$ip|$now|CLEAN|" >>"$CACHE_FILE"
-        echo "Fresh: CLEAN"
+        echo "Fresh : CLEAN"
     else
         # Some kind of structured error
         echo "$ip|$now|$status_string|" >>"$CACHE_FILE"
-        echo "Fresh: $status_string"
+        echo "Fresh : $status_string"
     fi
 }
 
@@ -300,7 +300,7 @@ if [ -z "$black_list_status" ]; then
 fi
 
 # Return results based on mode
-if [[ "$black_list_status" == "Cached: CLEAN" || "$black_list_status" == "Fresh: CLEAN"* ]]; then
+if [[ "$black_list_status" == "Cached: CLEAN" || "$black_list_status" == "Fresh : CLEAN"* ]]; then
     if [ "$boolean_mode" = true ]; then
         echo "false"
     elif [ "$quiet_mode" = false ]; then

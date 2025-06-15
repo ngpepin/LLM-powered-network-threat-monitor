@@ -84,18 +84,18 @@
 # shellcheck disable=SC2086
 # shellcheck disable=SC2001
 
-# Configuration variables
-SNORT_LOG=""    # Path to the snort log file (sourced from snort-monitor.conf
-NTOPNG_LOG=""   # Path to the ntopng log file (sourced from snort-monitor.conf)
-API_ENDPOINT="" # OpenAI API endpoint (sourced from snort-monitor.conf)
-API_KEY=""      # OpenAI API key (sourced from snort-monitor.conf)
-MODEL=""        # OpenAI model to use (sourced from snort-monitor.conf)
+# Configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
+SNORT_LOG="<provide SNORT_LOG in .conf file>"   # Path to the snort log file (sourced from snort-monitor.conf
+NTOPNG_LOG="<provide NTOPNG_LOG in .conf file>" # Path to the ntopng log file (sourced from snort-monitor.conf)
+API_ENDPOINT=""                                 # OpenAI API endpoint (sourced from snort-monitor.conf)
+API_KEY=""                                      # OpenAI API key (sourced from snort-monitor.conf)
+MODEL=""                                        # OpenAI model to use (sourced from snort-monitor.conf)
 
-# Default configuration variables that can be overridden in snort-monitor.conf
-UPDATE_INTERVAL=600 # Interval to check for new logs (in seconds)
-AUTO_UPDATE_WHITELIST_BOOL=true
-AUTO_UPDATE_HOUR="01:00" # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
-LOCAL_USER_AND_GROUP=""  # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
+# Default configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
+UPDATE_INTERVAL=99999             # Interval to check for new logs (in seconds)
+AUTO_UPDATE_WHITELIST_BOOL=false  # Whether to automatically update the whitelist
+AUTO_UPDATE_HOUR="00:00"          # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
+LOCAL_USER_AND_GROUP=""           # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 
 # Override this default prompt text in snort-monitor.conf if you wish:
 read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
@@ -140,12 +140,12 @@ Example Output:
 EOF
 
 # Provide these default paths in snort-monitor.conf:
-BLOCK_LIST_DIR="<provide BLOCK_LIST_DIR in .conf. file>"                   # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
-CONSOLIDATED_FILE_SHARE="<provide CONSOLIDATED_FILE_SHARE in .conf. file>" # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
-CONSOLIDATED_FILE="<provide ONSOLIDATED_FILE in .conf. file>"              # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
-WHITELIST_FILE="<provide WHITELIST_FILE in .conf. file>"                   # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
-REPORTS_DIR="<provide REPORTS_DIR in .conf. file>"                         # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
-WEB_DIR="<provide WEB_DIR in .conf. file>"                                 # e.g., /var/www/snort-monitor                               Directory for web files
+BLOCK_LIST_DIR="<provide BLOCK_LIST_DIR in .conf file>"                   # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
+CONSOLIDATED_FILE_SHARE="<provide CONSOLIDATED_FILE_SHARE in .conf file>" # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
+CONSOLIDATED_FILE="<provide ONSOLIDATED_FILE in .conf file>"              # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
+WHITELIST_FILE="<provide WHITELIST_FILE in .conf file>"                   # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
+REPORTS_DIR="<provide REPORTS_DIR in .conf file>"                         # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
+WEB_DIR="<provide WEB_DIR in .conf file>"                                 # e.g., /var/www/snort-monitor                               Directory for web files
 
 # Source the configuration file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -995,8 +995,10 @@ update_whitelist_runner() {
             sleep $((target - now))
 
             log "Auto-updating whitelist now"
+            echo "Running whitelist update script: $SCRIPT_DIR/extract-good-ips-from-block-list.sh"
             script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
             log "Whitelist update script output: $script_output"
+            echo "$script_output" >>"$SCRIPT_DIR/whitelist_update.log"
         done
     fi
 }
@@ -1063,7 +1065,7 @@ log "Block-list file: $CONSOLIDATED_FILE"
 while true; do
     if $first_time; then
         first_time=false
-        expiration_time=20
+        expiration_time=40 # Initial expiration time for the first analysis
         perturbed_interval=15
     else
         perturbed_interval=$(calculate_perturbed_interval)
