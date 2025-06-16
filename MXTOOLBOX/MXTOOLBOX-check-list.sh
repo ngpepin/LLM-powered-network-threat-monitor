@@ -73,14 +73,14 @@
 # shellcheck disable=SC2155
 #
 
-CACHE_FILE="< set CACHE_FILE in config file >"                                     # Path to the cache file
-CONSOLIDATED_FILE="< set CONSOLIDATED_FILE in config file >"                       # Path to the consolidated block list file
-DNS_CACHE_FILE="< set DNS_CACHE_FILE in config file >"                             # Path to the DNS cache file
-JSON_CACHE_DIR="< set WHITELIST_CANDIDATE_FILE in config file >"                   # Directory for storing raw JSON API responses
-WHITELIST_CANDIDATE_FILE="< set WHITELIST_CANDIDATE_FILE in config file >"         # Path to the outputted whitelist candidate file
-WHITELIST_FILE="< set WHITELIST_FILE in config file >"                             # Path to the whitelist file
-WHOIS_CACHE_FILE="< set WHOIS_CACHE_FILE in config file >"                         # Path to the WHOIS cache file
-WHITELIST_CANDIDATE_DELTA_FILE="< set WHITELIST_CANDIDATE_DELTA_FILE in config file >" 
+CACHE_FILE="< set CACHE_FILE in config file >"                             # Path to the cache file
+CONSOLIDATED_FILE="< set CONSOLIDATED_FILE in config file >"               # Path to the consolidated block list file
+DNS_CACHE_FILE="< set DNS_CACHE_FILE in config file >"                     # Path to the DNS cache file
+JSON_CACHE_DIR="< set WHITELIST_CANDIDATE_FILE in config file >"           # Directory for storing raw JSON API responses
+WHITELIST_CANDIDATE_FILE="< set WHITELIST_CANDIDATE_FILE in config file >" # Path to the outputted whitelist candidate file
+WHITELIST_FILE="< set WHITELIST_FILE in config file >"                     # Path to the whitelist file
+WHOIS_CACHE_FILE="< set WHOIS_CACHE_FILE in config file >"                 # Path to the WHOIS cache file
+WHITELIST_CANDIDATE_DELTA_FILE="< set WHITELIST_CANDIDATE_DELTA_FILE in config file >"
 
 # Source the configuration file
 SCRIPT_SUB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -219,7 +219,7 @@ print_results() {
         black_list_status=$($SCRIPT_SUB_DIR/MXTOOLBOX-check_blacklist_status.sh "$ip")
 
         # Add clean IP to candidate whitelist
-        if [[ "$black_list_status" == "Cached: CLEAN" || "$black_list_status" == "Fresh: CLEAN"* ]]; then
+        if [[ "$black_list_status" == "Cached: CLEAN" || "$black_list_status" == "Fresh : CLEAN"* ]]; then
             echo "$ip" >>"$WHITELIST_CANDIDATE_FILE"
         fi
 
@@ -258,12 +258,17 @@ print_results "$SCAN_FILE"
 # If scanning block list, then add candidate whitelisted IPs to the existing whitelist
 if [ "$scan_whitelist" = false ]; then
     cat "$WHITELIST_CANDIDATE_FILE" >"$WHITELIST_CANDIDATE_DELTA_FILE"
-    cat "$WHITELIST_FILE" >>"$WHITELIST_CANDIDATE_FILE"
-    tmp_file=$(mktemp)
-    sort "$WHITELIST_CANDIDATE_FILE" | uniq >"$tmp_file"
-    cat "$tmp_file" >"$WHITELIST_CANDIDATE_FILE"
-    rm -f "$tmp_file"
+    {
+        echo ""
+        cat "$WHITELIST_FILE"
+        echo ""
+    } >>"$WHITELIST_CANDIDATE_FILE"
 fi
+
+whitelist_candidate_temp=$(mktemp)
+cat "$WHITELIST_CANDIDATE_FILE" | sed '/^$/d' | sort | uniq >"$whitelist_candidate_temp"
+cat "$whitelist_candidate_temp" >"$WHITELIST_CANDIDATE_FILE"
+rm -f "$whitelist_candidate_temp"
 
 echo ""
 echo "Candidate whitelist written to: $WHITELIST_CANDIDATE_FILE"

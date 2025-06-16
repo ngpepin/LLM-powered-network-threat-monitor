@@ -7,9 +7,9 @@ WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist.txt"                            # IP wh
 REPORTS_DIR="$SCRIPT_DIR/reports"                                        # Directory to store PDF reports in
 WEB_DIR="/var/www/snort-monitor"                                         # Directory for web files
 
-UPDATE_INTERVAL=1800                                                     # Interval to check for new logs (in seconds)
-AUTO_UPDATE_WHITELIST_BOOL=true                                          # Whether to automatically update the whitelist
+UPDATE_INTERVAL=1800                                                     # Interval to check for new Snort and ntopng logs (in seconds)
 AUTO_UPDATE_HOUR="01:00"                                                 # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
+AUTO_UPDATE_WHITELIST_BOOL=false                                         # Whether to automatically update the whitelist at the above time
 LOCAL_USER_AND_GROUP="..."                                               # User and group for local file permissions
 
 PFSENSE_DIR="/var/log/pfsense"                                           # Directory where pfSense logs are stored

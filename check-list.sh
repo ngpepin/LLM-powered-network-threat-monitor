@@ -14,7 +14,7 @@
 #
 # Description:
 #     This is a helper script that checks a list of IP addresses (either from the active block list or active whitelist)
-#     against an external reputational sources (ABUSEIPDB or MXTOOLBOX, the latter being cached). 
+#     against an external reputational sources (ABUSEIPDB or MXTOOLBOX, the latter being cached).
 #     It determines the mode and source based on command-line arguments, loads configuration if needed,
 #     and invokes the appropriate checking script with the correct input and output files.
 #
@@ -23,7 +23,7 @@
 #     - For MXTOOLBOX, it calls MXTOOLBOX-check-list.sh with the appropriate mode switch.
 #
 # Outputs:
-#     - For ABUSEIPDB, the script will produce a CSV-formatted reputation report of either the whitelist or block list 
+#     - For ABUSEIPDB, the script will produce a CSV-formatted reputation report of either the whitelist or block list
 #       which can be ingested by other analysis tools.
 #     - For MXTOOLBOX, the script will produce a new candidate whitelist file:
 #           - If '--block-list' is specified, it will add IPs which MXTOOLBOX considers safe to the existing active whitelist, creating a new candidate.
@@ -115,7 +115,11 @@ if [[ "$source" == "$source_a" ]]; then
 
     # Execute the ABUSEIPDB script with the correct input and output files
     $SCRIPT_DIR/$source_a/$source_a_scriptname "$IN_FILE" "$OUT_FILE"
-
+    # create temp file
+    temp_file=$(mktemp)
+    cat "$OUT_FILE" | sed '/^$/d' | uniq | sort >"$temp_file"
+    cat "$temp_file" >"$OUT_FILE"
+    rm -f "$temp_file"
     echo "CSV reputation report file created: $OUT_FILE"
 
 else
@@ -128,6 +132,6 @@ else
 
     latest_candidate_file=$(find "$SCRIPT_DIR" -maxdepth 1 -name "ip-whitelist_candidate_*" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
     echo "Candidate whitelist created: $latest_candidate_file"
-
+    
 fi
 # End of script

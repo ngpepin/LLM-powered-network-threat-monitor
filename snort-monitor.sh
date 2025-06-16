@@ -618,6 +618,7 @@ consolidate_ips() {
 
     # Cleanup temp files
     rm -f "$TEMP_ALL_IPS" "$TEMP_VALID_IPS" "$TEMP_FILTERED_IPS"
+    log "Sleeping until next update cycle."
 }
 
 # Background monitoring function
@@ -1018,6 +1019,8 @@ update_whitelist_runner() {
             script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
             log "Whitelist update script output: $script_output"
             echo "$script_output" >>"$SCRIPT_DIR/whitelist_update.log"
+            sudo chown "$LOCAL_USER_AND_GROUP" "$SCRIPT_DIR/whitelist_update.log"
+            sudo chmod 666 "$SCRIPT_DIR/whitelist_update.log"
         done
     fi
 }
