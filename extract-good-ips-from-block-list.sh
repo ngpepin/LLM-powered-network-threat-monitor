@@ -112,7 +112,9 @@ else
           diff "$TEMP_FILE_2" "$CONSOLIDATED_FILE"
           cat "$WHITELIST_FILE" >"$archived_WHITELIST_FILE"
           cat "$TEMP_FILE_2" >"$WHITELIST_FILE"
+          cp -f "$WHITELIST_FILE" "$SCRIPT_DIR/ip-whitelist_latest.csv"
           echo "The old whitelist file has been backed up as $archived_WHITELIST_FILE"
+          echo "'ip-whitelist_latest.csv' has been updated to support additional manual analysis."
         else
           echo "No change to whitelist file required. No backup created."
         fi
