@@ -2,7 +2,7 @@
 
 # Constants
 CONFIDENCE_THRESHOLD=0
-REPORTS_THRESHOLD=5
+REPORTS_THRESHOLD=9
 WHITELIST_FILE="$HOME/.snort-monitor/whitelist.txt"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,13 +28,15 @@ filter_ips() {
 }
 
 # STEP 1: Check if any IPs in the block list are safe according to MXTOOLBOX
-echo "--------------------------------------------------------------------------------------------------------------------------------"
+echo "================================================================================================================================"
+echo "extract-good-ips-from-block-list.sh started at $(date)"
 echo "Checking the current block list with MXTOOLBOX..."
 $SCRIPT_DIR/check-list.sh "--block-list" "-m"
 latest_delta_file=$(find "$SCRIPT_DIR" -maxdepth 1 -name "ip-whitelist_delta_candidate_*" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 delta_line_count=$(wc -l <"$latest_delta_file")
 if [[ $delta_line_count -eq 0 ]]; then
   echo "No IPs were found in the block list that MXTOOLBOX considers safe. Exiting."
+  echo "================================================================================================================================"
   exit 0
 else
   echo "Created ${delta_line_count}-long list of IPs from the block-list that MXTOOLBOX considers safe: $latest_delta_file"
@@ -50,6 +52,7 @@ else
   CSV_line_count=$(wc -l <"$csv_file")
   if [[ $CSV_line_count -eq 0 ]]; then
     echo "No IPs were found in the ABUSEIPDB assessment. Exiting."
+    echo "================================================================================================================================"
     exit 0
   else
     echo "Created ${CSV_line_count}-row CSV file containing the ABUSEIPDB risk assessment: $csv_file"
@@ -70,6 +73,7 @@ else
     FILTERED_IP_line_count=$(echo "$filtered_ips" | sed '/^$/d' | wc -l)
     if [[ $FILTERED_IP_line_count -eq 0 ]]; then
       echo "No IPs were found that match the criteria. Exiting."
+      echo "================================================================================================================================"
       exit 0
     else
       echo "The following $FILTERED_IP_line_count IP(s) are considered safe and will be added to the whitelist file:"
@@ -81,6 +85,7 @@ else
       WHITELIST_line_count=$(wc -l <"$TEMP_FILE")
       if [[ $WHITELIST_line_count -eq 0 ]]; then
         echo "No IPs left in the whitelist after filtering. Exiting."
+        echo "================================================================================================================================"
         rm -f "$TEMP_FILE"
         exit 0
       else
@@ -88,6 +93,8 @@ else
         rm -f "$TEMP_FILE"
         echo "--------------------------------------------------------------------------------------------------------------------------------"
         echo "Created new whitelist with $WHITELIST_line_count IPs. The old whitelist file has been backed up as $archived_WHITELIST_FILE"
+        echo "extract-good-ips-from-block-list.sh completed successfully."
+        echo "================================================================================================================================"
       fi
     fi
   fi

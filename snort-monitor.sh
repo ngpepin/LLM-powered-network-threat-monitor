@@ -92,10 +92,10 @@ API_KEY=""                                      # OpenAI API key (sourced from s
 MODEL=""                                        # OpenAI model to use (sourced from snort-monitor.conf)
 
 # Default configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
-UPDATE_INTERVAL=99999             # Interval to check for new logs (in seconds)
-AUTO_UPDATE_WHITELIST_BOOL=false  # Whether to automatically update the whitelist
-AUTO_UPDATE_HOUR="00:00"          # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
-LOCAL_USER_AND_GROUP=""           # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
+UPDATE_INTERVAL=99999            # Interval to check for new logs (in seconds)
+AUTO_UPDATE_WHITELIST_BOOL=false # Whether to automatically update the whitelist
+AUTO_UPDATE_HOUR="00:00"         # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
+LOCAL_USER_AND_GROUP=""          # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 
 # Override this default prompt text in snort-monitor.conf if you wish:
 read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
@@ -624,7 +624,9 @@ consolidate_ips() {
         # Only update if the new content differs
         if ! cmp -s "$CONSOLIDATED_FILE.tmp" "$CONSOLIDATED_FILE"; then
             mv "$CONSOLIDATED_FILE.tmp" "$CONSOLIDATED_FILE"
-            log "Consolidated block list updated"
+            log "Consolidated block list updated. Requesting pfSense block-list reload."
+            sleep 1
+            $SCRIPT_DIR/force-pfsense-ntopng-update.sh &
         else
             rm "$CONSOLIDATED_FILE.tmp"
         fi

@@ -7,18 +7,59 @@ WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist.txt"                            # IP wh
 REPORTS_DIR="$SCRIPT_DIR/reports"                                        # Directory to store PDF reports in
 WEB_DIR="/var/www/snort-monitor"                                         # Directory for web files
 
-UPDATE_INTERVAL=120                                 # Interval to check for new snort logs (in seconds)
-PFSENSE_DIR="/var/log/pfsense"                      # Directory where pfSense logs are stored
-LOG_DIR="$PFSENSE_DIR/ ..."
-ALT_LOG_DIR="$PFSENSE_DIR/ ... "
-SNORT_LOG="$LOG_DIR/snort.log"
-NTOPNG_LOG="$ALT_LOG_DIR/ntopng.log"
+UPDATE_INTERVAL=1800                                                     # Interval to check for new logs (in seconds)
+AUTO_UPDATE_WHITELIST_BOOL=true                                          # Whether to automatically update the whitelist
+AUTO_UPDATE_HOUR="01:00"                                                 # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
+LOCAL_USER_AND_GROUP="..."                                               # User and group for local file permissions
 
-LOCAL_USER_AND_GROUP=" ... "
+PFSENSE_DIR="/var/log/pfsense"                                           # Directory where pfSense logs are stored
+LOG_DIR="$PFSENSE_DIR/..."                                               # Directory for pfSense logs
+ALT_LOG_DIR="$PFSENSE_DIR/..."                                           # Alternate directory for pfSense logs
+SNORT_LOG="$LOG_DIR/snort.log"                                           # Snort log file
+NTOPNG_LOG="$ALT_LOG_DIR/ntopng.log"                                     # ntopng log file
 
-API_ENDPOINT=' ... '
-API_KEY=" ... "
-MODEL="gpt-4o"
+API_ENDPOINT='...' # API endpoint for the AI service
+API_KEY="..."                                                            # OpenAI API key 
+MODEL="gpt-4o"                                                           # Model to use for the AI service (e.g., gpt-4o)
 
+# ------------ LOG ANALYSIS PROMPT ------------ #
+read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
+Role: You are an expert cybersecurity analyst.
+Task: Analyze Snort/ntopng logs and provide a structured threat report.
+Output Requirements using these section headings:
+1. HIGHEST THREAT LEVEL REACHED
+   Format: Single word (HIGH/MEDIUM/LOW/N/A) on its own line.
+   Purpose: For automated parsing.
+2. ASSESSMENT
+   Content: A succinct but analytically advanced summary of urgency and bottom-line impact (3-4 sentences).
+3. THREATS
+   Format: Prioritized HTML table with colored cells (High=pale-red, Medium=pale-orange, Low=pale-green).
+   Rules:
+   - Explicitly list all IPs or domain names of concern; don't use 'e.g.' or shortcut phrases like 'and other IPs' as a way of skipping a complete enumeration.
+   Columns: Threat Level, IP(s), Traffic Type, Justification.
+4. TIMELINE
+   Format: HTML table with time intervals (include day/month if not today).
+5. NEXT STEPS
+   Format: HTML bulleted list, priority-ordered (urgent first).
+6. TECHNICAL DISCUSSION
+   Content: Advanced and detailed technical analysis organized using the WASC threat classification and including advisory references.
+   The goal is to educate an advanced reader on the nature of the threats and how they can be mitigated. Provide longer and more detailed description to advance this objective.
+Styling & Compliance:
+   Output Format: HTML only (no Markdown/JSON).
+   Tables: Use pale red/orange/green backgrounds for High/Medium/Low.
+   Consistency: Align threat levels across all sections.
+EOF
 
-
+# ------------ BLOCKLIST PROMPT ------------ #
+read -r -d '' BLOCKLIST_PROMPT_TEXT <<'EOF'
+Role: You are an expert cybersecurity analyst.
+Task: Generate a plain-text block list of external (routable) IP addresses for pfSense pfBlockerNG based on Snort/ntopng logs.
+Requirements:
+1. Scope: Only include external, routable IPs. 
+2. Validation: Research each IP to avoid blocking trusted providers (e.g., Microsoft 365, Gmail).
+3. Format: Plain text, one IP per line. No subnet masks, headers, or explanations.
+4. Output Restrictions: No HTML/Markdown/JSON. Only raw IPs.
+Example Output:
+203.0.113.45
+198.51.100.10
+EOF
