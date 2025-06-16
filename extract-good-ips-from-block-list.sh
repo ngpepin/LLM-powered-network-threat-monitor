@@ -5,6 +5,8 @@ CONFIDENCE_THRESHOLD=0
 REPORTS_THRESHOLD=9
 WHITELIST_FILE="$HOME/.snort-monitor/whitelist.txt"
 
+separator_characters=155
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export SCRIPT_DIR
 if [[ -f "$SCRIPT_DIR/snort-monitor.conf" ]]; then
@@ -27,8 +29,18 @@ filter_ips() {
   '
 }
 
+sep_dashes() {
+  printf '%*s\n' "$separator_characters" '' | tr ' ' '-'
+}
+
+sep_double() {
+  printf '%*s\n' "$separator_characters" '' | tr ' ' '='
+}
+
+WHITELIST_start_count=$(cat "$WHITELIST_FILE" | sed '/^$/d' | wc -l)
+
 # STEP 1: Check if any IPs in the block list are safe according to MXTOOLBOX
-echo "================================================================================================================================"
+sep_double # ================
 echo "extract-good-ips-from-block-list.sh started at $(date)"
 echo "Checking the current block list with MXTOOLBOX..."
 $SCRIPT_DIR/check-list.sh "--block-list" "-m"
@@ -36,7 +48,7 @@ latest_delta_file=$(find "$SCRIPT_DIR" -maxdepth 1 -name "ip-whitelist_delta_can
 delta_line_count=$(wc -l <"$latest_delta_file")
 if [[ $delta_line_count -eq 0 ]]; then
   echo "No IPs were found in the block list that MXTOOLBOX considers safe. Exiting."
-  echo "================================================================================================================================"
+  sep_double # ================
   exit 0
 else
   echo "Created ${delta_line_count}-long list of IPs from the block-list that MXTOOLBOX considers safe: $latest_delta_file"
@@ -44,7 +56,7 @@ else
   cat "$latest_delta_file"
 
   # STEP 2: Run the ABUSEIPDB bulk IP check on the latest delta file
-  echo "--------------------------------------------------------------------------------------------------------------------------------"
+  sep_dashes # ----------------
   echo "Running ABUSEIPDB bulk IP check on these IPs to confirm that they are safe..."
   csv_file="${latest_delta_file%.*}.csv"
   $SCRIPT_DIR/ABUSEIPDB/ABUSEIPDB-bulk-ip-check.sh "$latest_delta_file" "$csv_file"
@@ -52,7 +64,7 @@ else
   CSV_line_count=$(wc -l <"$csv_file")
   if [[ $CSV_line_count -eq 0 ]]; then
     echo "No IPs were found in the ABUSEIPDB assessment. Exiting."
-    echo "================================================================================================================================"
+    sep_double # ================
     exit 0
   else
     echo "Created ${CSV_line_count}-row CSV file containing the ABUSEIPDB risk assessment: $csv_file"
@@ -61,40 +73,53 @@ else
     printf '%s\n' "$ABUSEIPDB_assessment"
 
     # STEP 3: Filter the IPs based on the ABUSEIPDB assessment and thresholds
-    echo "--------------------------------------------------------------------------------------------------------------------------------"
-    echo "Filtering IPs based on ABUSEIPDB assessment and thresholds of max $CONFIDENCE_THRESHOLD confidence and max $REPORTS_THRESHOLD reports..."
+    sep_dashes # ----------------
+    echo "Filtering IPs based on ABUSEIPDB assessment and thresholds of maximum $CONFIDENCE_THRESHOLD confidence of abuse"
+    echo "and maximum $REPORTS_THRESHOLD reports of abuse..."
     filtered_ips="$(filter_ips "$ABUSEIPDB_assessment")"
 
     # STEP 4: Add the filtered IPs to the whitelist file, backing it up first
-    echo "--------------------------------------------------------------------------------------------------------------------------------"
-    timestamp=$(date +"_%Y%m%d_%I%M%P")
-    archived_WHITELIST_FILE="${WHITELIST_FILE%.*}_archived_${timestamp}.txt"
-    cat "$WHITELIST_FILE" | grep -v '^$' >"$archived_WHITELIST_FILE"
+    sep_dashes # ----------------
     FILTERED_IP_line_count=$(echo "$filtered_ips" | sed '/^$/d' | wc -l)
     if [[ $FILTERED_IP_line_count -eq 0 ]]; then
       echo "No IPs were found that match the criteria. Exiting."
-      echo "================================================================================================================================"
+      sep_double # ================
       exit 0
     else
-      echo "The following $FILTERED_IP_line_count IP(s) are considered safe and will be added to the whitelist file:"
-      printf '%s\n' "$filtered_ips" | tee -a "$WHITELIST_FILE"
-
-      # STEP 5: Sort and remove duplicates from the whitelist file
+      timestamp=$(date +"_%Y%m%d_%I%M%P")
+      archived_WHITELIST_FILE="${WHITELIST_FILE%.*}_archived_${timestamp}.txt"
       TEMP_FILE=$(mktemp)
-      sort "$WHITELIST_FILE" | uniq | grep -v '^$' >"$TEMP_FILE"
-      WHITELIST_line_count=$(wc -l <"$TEMP_FILE")
-      if [[ $WHITELIST_line_count -eq 0 ]]; then
-        echo "No IPs left in the whitelist after filtering. Exiting."
-        echo "================================================================================================================================"
+      TEMP_FILE_2=$(mktemp)
+      cat "$WHITELIST_FILE" >"$TEMP_FILE"
+      echo "The following $FILTERED_IP_line_count IP(s) are considered safe and will be added to the whitelist file if they are new:"
+
+      # STEP 5: Print and add the filtered IPs to the temporary file which contains the current whitelist, then sort and remove duplicates
+      printf '%s\n' "$filtered_ips" | tee -a "$TEMP_FILE"
+      sort "$TEMP_FILE" | uniq | grep -v '^$' >"$TEMP_FILE_2"
+      WHITELIST_end_count=$(cat "$TEMP_FILE_2" | wc -l)
+      if [[ $WHITELIST_end_count -eq 0 ]]; then
+        echo "No IPs are left in the whitelist after filtering. Exiting."
+        cat "$WHITELIST_FILE" >"$archived_WHITELIST_FILE"
+        echo "" >"$WHITELIST_FILE"
         rm -f "$TEMP_FILE"
+        rm -f "$TEMP_FILE_2"
+        sep_double # ================
         exit 0
       else
-        cat "$TEMP_FILE" >"$WHITELIST_FILE"
+        difference=$((WHITELIST_end_count - WHITELIST_start_count))
+        if [[ $difference -gt 0 ]]; then
+          echo "Created a new whitelist with a net addition of $difference new unique IP(s). These IP(s) follow:"
+          diff "$TEMP_FILE_2" "$CONSOLIDATED_FILE"
+          cat "$WHITELIST_FILE" >"$archived_WHITELIST_FILE"
+          cat "$TEMP_FILE_2" >"$WHITELIST_FILE"
+          echo "The old whitelist file has been backed up as $archived_WHITELIST_FILE"
+        else
+          echo "No change to whitelist file required. No backup created."
+        fi
         rm -f "$TEMP_FILE"
-        echo "--------------------------------------------------------------------------------------------------------------------------------"
-        echo "Created new whitelist with $WHITELIST_line_count IPs. The old whitelist file has been backed up as $archived_WHITELIST_FILE"
+        rm -f "$TEMP_FILE_2"
         echo "extract-good-ips-from-block-list.sh completed successfully."
-        echo "================================================================================================================================"
+        sep_double # ================
       fi
     fi
   fi
