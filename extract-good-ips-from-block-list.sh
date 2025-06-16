@@ -3,6 +3,59 @@
 # shellcheck disable=SC2002
 # shellcheck disable=SC2086
 
+# extract-good-ips-from-block-list.sh
+# -----------------------------------
+# This script automates the process of extracting "good" (safe) IP addresses from a block list by cross-referencing with MXTOOLBOX and ABUSEIPDB, 
+# and updating a whitelist accordingly.
+#
+# Workflow Overview:
+# ------------------
+# 1. **Configuration & Setup**
+#   - Loads configuration from `snort-monitor.conf` if present.
+#   - Sets thresholds for confidence and reports from ABUSEIPDB.
+#   - Defines file paths and formatting helpers.
+#
+# 2. **MXTOOLBOX Check**
+#   - Runs `check-list.sh` to identify IPs in the block list that MXTOOLBOX considers safe.
+#   - Outputs a delta file of candidate IPs.
+#
+# 3. **ABUSEIPDB Bulk Check**
+#   - Runs a bulk IP check on the candidate IPs using ABUSEIPDB.
+#   - Produces a CSV file with risk assessments for each IP.
+#
+# 4. **Filtering**
+#   - Filters IPs from the CSV based on configured thresholds for confidence and number of reports.
+#   - Only IPs with confidence and reports below or equal to the thresholds are considered safe.
+#
+# 5. **Whitelist Update**
+#   - Backs up the current whitelist.
+#   - Adds new, filtered safe IPs to the whitelist, ensuring uniqueness and sorting.
+#   - Updates a CSV for manual analysis.
+#   - Reports changes and cleans up temporary files.
+#
+# Functions:
+# ----------
+# - `filter_ips`: Filters CSV content for IPs meeting the safety criteria.
+# - `sep_dashes`, `sep_double`: Print separator lines for output formatting.
+#
+# Variables:
+# ----------
+# - `CONFIDENCE_THRESHOLD`: Maximum allowed confidence of abuse (default: 0).
+# - `REPORTS_THRESHOLD`: Maximum allowed number of abuse reports (default: 9).
+# - `WHITELIST_FILE`: Path to the whitelist file.
+# - `separator_characters`: Width for separator lines.
+#
+# Exit Conditions:
+# ----------------
+# - No safe IPs found by MXTOOLBOX or ABUSEIPDB.
+# - No IPs meet the filtering criteria.
+# - Whitelist remains unchanged after processing.
+#
+# Usage:
+# ------
+# Run this script as part of the snort-monitor suite to maintain an up-to-date whitelist of safe IPs, automatically cross-checked against external threat intelligence sources.
+#
+
 # Constants
 CONFIDENCE_THRESHOLD=0
 REPORTS_THRESHOLD=9
