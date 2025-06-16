@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # resolve-ntopng-log.sh
 # ---------------------
 # This script processes an ntopng log file, resolving any domain names found within the log to their corresponding IP addresses using DNS. It outputs a new log file with the resolved IPs in place of domain names. To optimize performance and reduce redundant DNS queries, the script maintains a cache of domain-to-IP mappings, which is periodically purged to prevent excessive growth.

@@ -1,4 +1,36 @@
 #!/bin/bash
+
+# convert-to-CIDR.sh
+# ------------------
+# This script summarizes a list of IP addresses into the smallest possible set of CIDR blocks.
+#
+# Usage:
+#     ./convert-to-CIDR.sh <path-to-ip-list-file>
+#
+# Arguments:
+#     <path-to-ip-list-file>   Path to a file containing a list of IP addresses (one per line).
+#
+# Behavior:
+#     - Reads the input file, removes duplicates and empty lines.
+#     - Summarizes the IP addresses into CIDR blocks using Python and the netaddr library.
+#     - If the EXPLICIT_SLASH32 variable is set to true, all IPs (including single IPs) are output in CIDR notation (e.g., 1.2.3.4/32).
+#     - If EXPLICIT_SLASH32 is false (default), single IPs are output without the /32 suffix.
+#     - The summarized list is written to a new file in the same directory as the input, with "_CIDR" appended to the filename.
+#
+# Dependencies:
+#     - Python 3
+#     - netaddr Python library
+#
+# Exit Codes:
+#     - 1: Missing argument, input file not found, or Python processing error.
+#
+# Example:
+#     ./convert-to-CIDR.sh ips.txt
+#
+# Output:
+#     Summarized IP list written to: <output-file-path>
+# ---------------------------------------------------------------------------------
+
 EXPLICIT_SLASH32=false
 set -e
 

@@ -1,88 +1,72 @@
 #!/bin/bash
-# -----------------------------------------------------------------------------
-# snort-monitor.sh
-#
-# Overview:
-#   This script provides a comprehensive monitoring and analysis solution for
-#   Snort IDS and ntopng network traffic logs. It performs periodic analysis
-#   of both log sources, generates prioritized threat summaries using the
-#   OpenAI API, and serves the results as a dynamic web page. The integrated
-#   solution provides enhanced network visibility by correlating intrusion
-#   detection alerts with traffic flow patterns.
-#
-# Features:
-#   - Periodic analysis of Snort IDS alerts and ntopng traffic logs with
-#     configurable intervals and randomized timing to avoid patterns
-#   - Integration with OpenAI API for advanced threat correlation and analysis
-#   - Dynamic HTML web page generation with threat summaries and log content
-#   - Simple Python-based HTTP server with cache control for serving results
-#   - Automated block list generation and consolidation with whitelist filtering
-#   - PDF report generation for each analysis session
-#   - Graceful error handling and automatic retries for API/server failures
-#   - Background monitoring of block list directory for real-time updates
-#
-# Configuration:
-#   - SNORT_LOG: Path to Snort alert log file (from snort-monitor.conf)
-#   - NTOPNG_LOG: Path to ntopng log file (from snort-monitor.conf)
-#   - API_ENDPOINT/API_KEY/MODEL: OpenAI API configuration
-#   - WEB_DIR: Directory for web interface files
-#   - TIMESTAMP_FILE: Tracks last analysis time
-#   - LOG_FILE: Script activity log location
-#   - BLOCK_LIST_DIR: Storage for generated block lists
-#   - CONSOLIDATED_FILE_SHARE: Shared location for final block list
-#   - WHITELIST_FILE: IP addresses to exclude from blocking
-#   - REPORTS_DIR: Storage for generated PDF reports
-#   - UPDATE_INTERVAL: Base analysis interval (seconds)
-#   - INTERVAL_PERTURBATION_MIN/MAX: Range for randomizing intervals
-#   - WEBPAGE_EXPIRATION_GRACE: Buffer time for analysis completion
-#   - WEB_PORT: Web interface port
-#   - LOG_LINES_TO_SHOW: Number of log lines to process/display
-#   - BLOCK_LIST_WEB_PORT: Block list sharing port
-#   - DELETE_BLOCK_LISTS_AFTER: Retention period for block lists (days)
-#
-# Dependencies:
-#   - Bash shell
-#   - Python 3 (for HTTP servers)
-#   - jq (JSON processing)
-#   - curl (API requests)
-#   - wkhtmltopdf (PDF report generation)
-#   - inotify-tools (directory monitoring)
-#
-# Main Functions:
-#   - log: Timestamped logging utility
-#   - escape_json/html: Data sanitization functions
-#   - encode/decode: Base64 parameter handling
-#   - remove_backticks: Text formatting cleanup
-#   - start_web_server: Main analysis web interface
-#   - share_block_list_via_HTTP: Block list sharing service
-#   - save_PDF_report: Report generation
-#   - create_webpage: HTML content generation
-#   - is_public_ip: IP address classification
-#   - consolidate_ips: Block list processing
-#   - start_monitor: Directory watcher for block lists
-#   - cleanup: Exit handler
-#   - update_analysis: Core analysis workflow
-#   - calculate_perturbed_interval: Randomized timing
-#
-# Usage:
-#   1. Configure snort-monitor.conf with paths and API credentials
-#   2. Run script to start monitoring and web interface
-#   3. Access analysis at http://<server>:<WEB_PORT>
-#   4. Access block list at http://<server>:<BLOCK_LIST_WEB_PORT>
-#
-# Notes:
-#   - Designed for continuous operation with resilience features
-#   - All generated files are managed in configured directories
-#   - Web interface and block lists auto-refresh
-#   - Correlates Snort alerts with ntopng traffic patterns
-# -----------------------------------------------------------------------------
-#
 # Shellcheck directives
 # shellcheck disable=SC2155
 # shellcheck disable=SC2181
 # shellcheck disable=SC1091
 # shellcheck disable=SC2086
 # shellcheck disable=SC2001
+###############################################################################
+#
+# snort-monitor.sh
+# -----------------------------------------------------------------------------
+#
+# Overview:
+#   This script provides a comprehensive monitoring and automation solution for
+#   correlating Snort and ntopng logs, generating threat analysis reports,
+#   maintaining block lists for pfSense/pfBlockerNG, and serving a web-based
+#   dashboard for real-time security visibility.
+#
+# Features:
+#   - Loads configuration from an external .conf file for flexible deployment.
+#   - Periodically analyzes Snort and ntopng logs, correlating events.
+#   - Submits log data to an LLM API for advanced threat analysis and block list
+#     generation, using customizable prompt templates.
+#   - Generates HTML and PDF threat reports, including structured sections and
+#     technical discussions.
+#   - Maintains and consolidates block lists, applying whitelist filtering and
+#     public IP validation.
+#   - Serves a web dashboard with automatic refresh and cache control.
+#   - Provides a secondary HTTP server for sharing consolidated block lists with the 
+#     pfSense firewall.
+#   - Supports automatic whitelist updates at a scheduled time.
+#   - Handles dependency installation, log rotation, and cleanup of old files.
+#   - Implements randomized intervals for analysis to avoid predictable patterns.
+#
+# Main Components:
+#   - Configuration loading and variable initialization.
+#   - Dependency checks and installation.
+#   - Web server setup for dashboard and block list sharing.
+#   - Utility functions for encoding, escaping, and file management.
+#   - Core functions:
+#       * save_PDF_report: Generates PDF from HTML analysis.
+#       * create_webpage: Builds the HTML dashboard.
+#       * is_public_ip: Validates routable IPv4 addresses.
+#       * consolidate_ips: Aggregates and filters block list IPs.
+#       * update_analysis: Orchestrates log analysis, API calls, reporting, and
+#         block list generation.
+#       * calculate_perturbed_interval: Adds jitter to analysis intervals.
+#       * update_whitelist_runner: Schedules daily whitelist updates.
+#   - Background monitoring and cleanup logic.
+#   - Main loop for periodic analysis and dashboard updates.
+#
+# Usage:
+#   - Place this script and its .conf file in the same directory.
+#   - Ensure required dependencies are installed (the script will attempt to
+#     install missing ones).
+#   - Configure paths, API credentials, and operational parameters in the .conf
+#     file.
+#   - Run the script as a service or in the background.
+#
+# Dependencies:
+#   - bash, curl, jq, inotifywait, wkhtmltopdf, python3
+#
+# Author:
+#   Nicolas Pepin
+#
+# License:
+#   MIT License
+#
+###############################################################################
 
 # Configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
 SNORT_LOG="<provide SNORT_LOG in .conf file>"   # Path to the snort log file (sourced from snort-monitor.conf
@@ -317,9 +301,9 @@ share_block_list_via_HTTP() {
     done
 }
 
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Function: save_PDF_report
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Generates a PDF report from the threat analysis HTML content. The report
 # filename includes the threat level and timestamp for easy identification.
 # Handles both Snort and ntopng-derived threat information in the content.
@@ -340,7 +324,6 @@ share_block_list_via_HTTP() {
 # Dependencies:
 #   - wkhtmltopdf for PDF generation
 #   - Temporary file creation
-# -----------------------------------------------------------------------
 #
 save_PDF_report() {
     local threat_level="$1"
@@ -368,9 +351,9 @@ save_PDF_report() {
     return 0
 }
 
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Function: create_webpage
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Generates the HTML interface displaying correlated Snort/ntopng analysis.
 # Handles both updated content and cached displays when no new alerts exist.
 #
@@ -396,7 +379,6 @@ save_PDF_report() {
 #
 # Output:
 #   - Creates/updates $WEB_DIR/index.html
-# -----------------------------------------------------------------------
 #
 create_webpage() {
     local updated="$1"                            # Whether the webpage is being updated
@@ -521,9 +503,9 @@ create_webpage() {
 EOF
 }
 
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Function: is_public_ip
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Determines if an IP address is public/routable, filtering out private,
 # reserved, and internal addresses. Used to validate block list candidates
 # from both Snort and ntopng sources.
@@ -541,7 +523,6 @@ EOF
 #   - 127.0.0.0/8 (loopback)
 #   - 100.64.0.0/10 (Carrier-grade NAT)
 #   - Invalid/malformed addresses
-# -----------------------------------------------------------------------
 #
 is_public_ip() {
     local ip="$1"
@@ -559,9 +540,9 @@ is_public_ip() {
     return 0
 }
 
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Function: consolidate_ips
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Processes IP addresses from generated block lists, applying validation
 # and whitelist filtering. Handles IPs from both Snort alerts and ntopng
 # traffic patterns. Creates a unified block list for firewall implementation.
@@ -582,7 +563,6 @@ is_public_ip() {
 #   - Only processes valid, public IPv4 addresses
 #   - Maintains idempotency - only updates consolidated file when needed
 #   - Handles empty whitelist scenarios gracefully
-# -----------------------------------------------------------------------
 #
 consolidate_ips() {
     # Create empty whitelist if file doesn't exist
@@ -666,7 +646,22 @@ start_monitor() {
         done
 }
 
-# Cleanup function
+# -----------------------------------------------------------------------------
+# Function: cleanup 
+# -----------------------------------------------------------------------------
+# This function is responsible for gracefully stopping all background processes started by the Snort Monitor service. 
+# It attempts to terminate each process using their respective process IDs (PIDs), first with a standard kill signal, 
+# and then with a forceful kill (-9) if the process does not terminate. The function logs the status of each process 
+# termination and confirms whether all processes have been stopped successfully before exiting the script.
+#
+# Processes handled:
+# - MONITOR_PID: Main monitor process
+# - WHITELIST_UPDATER_PID: Whitelist updater process
+# - BLOCK_LIST_SERVER_PID: Block list server process
+# - WEB_SERVER_PID: Web server process
+#
+# Logs are generated for each step, and the function ensures a clean shutdown of the service.
+# 
 cleanup() {
     kill "$MONITOR_PID" 2>/dev/null
     kill "$WHITELIST_UPDATER_PID" 2>/dev/null
@@ -704,9 +699,9 @@ cleanup() {
     exit 0
 }
 
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Function: update_analysis
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Core function that performs periodic analysis of Snort and ntopng logs.
 # Correlates data from both sources, generates threat assessments via API,
 # and triggers follow-up actions including web updates and block list
@@ -738,7 +733,6 @@ cleanup() {
 #   - Updates web interface
 #   - Generates PDF reports
 #   - May create new block list files
-# -----------------------------------------------------------------------
 #
 update_analysis() {
     local expires_in="$(decode "$1")" # Web page expiration time in seconds
@@ -945,9 +939,9 @@ The following IPs have already been blocked: $blocked_ips" \
     fi
 }
 
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Function: calculate_perturbed_interval
-# -----------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Computes randomized intervals for periodic analysis to prevent predictable
 # patterns in API calls and log processing. Applies jitter to base interval
 # while ensuring reasonable bounds.
@@ -965,7 +959,6 @@ The following IPs have already been blocked: $blocked_ips" \
 #   - Helps avoid pattern detection in API usage
 #   - Maintains overall average near UPDATE_INTERVAL
 #   - Uses awk for precise floating point calculations
-# -----------------------------------------------------------------------
 #
 calculate_perturbed_interval() {
     # Generate random perturbation factor between min and max
@@ -982,6 +975,30 @@ calculate_perturbed_interval() {
     echo $perturbed_refresh
 }
 
+# -----------------------------------------------------------------------------
+# Function: update_whitelist_runner
+# -----------------------------------------------------------------------------
+# Description:
+#   Runs a background loop that automatically updates the whitelist at a
+#   specified hour each day, as defined by the AUTO_UPDATE_HOUR variable.
+#   The update is performed only if AUTO_UPDATE_WHITELIST_BOOL is set to true.
+#   The function calculates the time until the next scheduled update, sleeps
+#   until that time, then executes the whitelist update script
+#   (extract-good-ips-from-block-list.sh). The output of the script is logged
+#   and appended to a log file (whitelist_update.log).
+#
+# Globals:
+#   AUTO_UPDATE_WHITELIST_BOOL - Boolean flag to enable/disable auto-update.
+#   AUTO_UPDATE_HOUR           - Target hour for daily update (e.g., "03:00").
+#   SCRIPT_DIR                 - Directory containing the update script.
+#
+# Dependencies:
+#   - extract-good-ips-from-block-list.sh: Script to perform the actual update.
+#   - log: Function to log messages.
+#
+# Usage:
+#   update_whitelist_runner
+#
 update_whitelist_runner() {
     # Background loop running task at AUTO_UPDATE_HOUR daily
 
@@ -1005,31 +1022,47 @@ update_whitelist_runner() {
     fi
 }
 
-# -----------------------------------------------------------------------
-# Main execution performs the following tasks:
-# -----------------------------------------------------------------------
-# 1. Logs the start of the Snort Monitor Service.
-# 2. Starts a web server in the background.
-# 3. Waits for 2 seconds to ensure the web server is initialized.
-# 4. Creates an initial webpage with default values indicating that the
-#    first log analysis is pending.
+# -----------------------------------------------------------------------------
+# MAINLINE
+# -----------------------------------------------------------------------------
+# This mainline starts and manages the Snort Monitor Service.
 #
-# The script then enters an infinite loop where it:
-# - Calculates a perturbed interval for the next analysis.
-# - Computes the expiration time for the webpage based on the perturbed interval
-#   and a predefined grace period allowing for the LLM API call and analysis to complete.
-# - Updates the analysis webpage with the new expiration time.
-# - Waits for the perturbed interval before repeating the process.
+# Main functionalities:
+# - Logs the startup of the Snort Monitor Service and its components.
+# - Starts an alert web server and stores its PID.
+# - Creates an initial webpage indicating that log analysis is pending.
+# - Performs initial block list consolidation.
+# - Starts a background process to periodically update the whitelist.
+# - Starts a background log monitor process.
+# - Starts a web server to share the block list and stores its PID.
+# - Sets up a trap to ensure all background processes are terminated when the script exits.
+# - Logs the PIDs and file paths of all major components for monitoring and debugging.
+# - Enters a main loop that:
+#     - Sets initial expiration and interval values for the first analysis.
+#     - For subsequent iterations, calculates a perturbed interval and expiration time.
+#     - Updates the analysis webpage with the new expiration time.
+#     - Sleeps for the calculated interval before repeating.
 #
-# Functions used:
-# - log: Logs messages to a logging system.
-# - start_web_server: Starts the web server in the background.
-# - create_webpage: Generates the initial webpage with encoded parameters.
-# - calculate_perturbed_interval: Computes a randomized interval for the next iteration.
-# - update_analysis: Updates the analysis webpage with new data.
-# - encode: Encodes data for safe usage in the webpage.
-# -----------------------------------------------------------------------
+# Variables:
+# - WEB_PORT: Port for the alert web server.
+# - BLOCK_LIST_WEB_PORT: Port for the block list web server.
+# - WEBPAGE_EXPIRATION_GRACE: Grace period for webpage expiration.
+# - WHITELIST_FILE: Path to the whitelist file.
+# - CONSOLIDATED_FILE: Path to the consolidated block-list file.
 #
+# Background processes:
+# - Alert web server
+# - Whitelist updater
+# - Log monitor
+# - Block list web server
+#
+# Cleanup:
+# - All background processes are terminated on script exit via the 'cleanup' function.
+#
+# Dependencies:
+# - Functions: log, start_web_server, create_webpage, encode, consolidate_ips, update_whitelist_runner, start_monitor, 
+#   share_block_list_via_HTTP, calculate_perturbed_interval, update_analysis, cleanup
+# 
 log "**************** Starting Snort Monitor Service ****************"
 log "Starting alert web server on port $WEB_PORT"
 start_web_server &
