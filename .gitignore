@@ -20,4 +20,5 @@
 /Powerline
 bulk-check/
 /force-pfsense-ntopng-update.sh
-/re-init-monitoring.sh
+/reinit-monitoring.sh
+reinit-monitoring.sh
