@@ -26,7 +26,7 @@
 #   - Maintains and consolidates block lists, applying whitelist filtering and
 #     public IP validation.
 #   - Serves a web dashboard with automatic refresh and cache control.
-#   - Provides a secondary HTTP server for sharing consolidated block lists with the 
+#   - Provides a secondary HTTP server for sharing consolidated block lists with the
 #     pfSense firewall.
 #   - Supports automatic whitelist updates at a scheduled time.
 #   - Handles dependency installation, log rotation, and cleanup of old files.
@@ -78,7 +78,8 @@ MODEL=""                                        # OpenAI model to use (sourced f
 # Default configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
 UPDATE_INTERVAL=99999            # Interval to check for new logs (in seconds)
 AUTO_UPDATE_WHITELIST_BOOL=false # Whether to automatically update the whitelist
-AUTO_UPDATE_HOUR="00:00"         # Time of day to update the whitelist (24-hour format, e.g., "14:30" for 2:30 PM)
+AUTO_UPDATE_HOUR_1="02:00"       # Time of day to update the whitelist #1 (24-hour format, e.g., "14:30" for 2:30 PM)
+AUTO_UPDATE_HOUR_2="12:00"       # Time of day to update the whitelist #2 (24-hour format, e.g., "14:30" for 2:30 PM)
 LOCAL_USER_AND_GROUP=""          # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 
 # Override this default prompt text in snort-monitor.conf if you wish:
@@ -648,24 +649,26 @@ start_monitor() {
 }
 
 # -----------------------------------------------------------------------------
-# Function: cleanup 
+# Function: cleanup
 # -----------------------------------------------------------------------------
-# This function is responsible for gracefully stopping all background processes started by the Snort Monitor service. 
-# It attempts to terminate each process using their respective process IDs (PIDs), first with a standard kill signal, 
-# and then with a forceful kill (-9) if the process does not terminate. The function logs the status of each process 
+# This function is responsible for gracefully stopping all background processes started by the Snort Monitor service.
+# It attempts to terminate each process using their respective process IDs (PIDs), first with a standard kill signal,
+# and then with a forceful kill (-9) if the process does not terminate. The function logs the status of each process
 # termination and confirms whether all processes have been stopped successfully before exiting the script.
 #
 # Processes handled:
 # - MONITOR_PID: Main monitor process
-# - WHITELIST_UPDATER_PID: Whitelist updater process
+# - WHITELIST_UPDATER_1_PID: Whitelist updater process #1
+# - WHITELIST_UPDATER_2_PID: Whitelist updater process #2
 # - BLOCK_LIST_SERVER_PID: Block list server process
 # - WEB_SERVER_PID: Web server process
 #
 # Logs are generated for each step, and the function ensures a clean shutdown of the service.
-# 
+#
 cleanup() {
     kill "$MONITOR_PID" 2>/dev/null
-    kill "$WHITELIST_UPDATER_PID" 2>/dev/null
+    kill "$WHITELIST_UPDATER_1_PID" 2>/dev/null
+    kill "$WHITELIST_UPDATER_2_PID" 2>/dev/null
     kill "$BLOCK_LIST_SERVER_PID" 2>/dev/null
     kill "$WEB_SERVER_PID" 2>/dev/null
     sleep 2
@@ -675,9 +678,13 @@ cleanup() {
         log "Monitor process is still running, stopping it..."
         kill -9 "$MONITOR_PID"
     fi
-    if ps -p "$WHITELIST_UPDATER_PID" >/dev/null; then
-        log "Whitelist updater process is still running, stopping it..."
-        kill -9 "$WHITELIST_UPDATER_PID"
+    if ps -p "$WHITELIST_UPDATER_1_PID" >/dev/null; then
+        log "Whitelist updater process #1 is still running, stopping it..."
+        kill -9 "$WHITELIST_UPDATER_1_PID"
+    fi
+    if ps -p "$WHITELIST_UPDATER_2_PID" >/dev/null; then
+        log "Whitelist updater process #2 is still running, stopping it..."
+        kill -9 "$WHITELIST_UPDATER_2_PID"
     fi
     if ps -p "$BLOCK_LIST_SERVER_PID" >/dev/null; then
         log "Block list server process is still running, stopping it..."
@@ -689,7 +696,8 @@ cleanup() {
     fi
     sleep 2
     if ! ps -p "$MONITOR_PID" >/dev/null &&
-        ! ps -p "$WHITELIST_UPDATER_PID" >/dev/null &&
+        ! ps -p "$WHITELIST_UPDATER_1_PID" >/dev/null &&
+        ! ps -p "$WHITELIST_UPDATER_2_PID" >/dev/null &&
         ! ps -p "$BLOCK_LIST_SERVER_PID" >/dev/null &&
         ! ps -p "$WEB_SERVER_PID" >/dev/null; then
         log "All background processes stopped successfully"
@@ -988,9 +996,11 @@ calculate_perturbed_interval() {
 #   (extract-good-ips-from-block-list.sh). The output of the script is logged
 #   and appended to a log file (whitelist_update.log).
 #
+# Parameters:
+#   run_hour                   - Target hour for daily update (e.g., "03:00").
+#
 # Globals:
 #   AUTO_UPDATE_WHITELIST_BOOL - Boolean flag to enable/disable auto-update.
-#   AUTO_UPDATE_HOUR           - Target hour for daily update (e.g., "03:00").
 #   SCRIPT_DIR                 - Directory containing the update script.
 #
 # Dependencies:
@@ -1001,6 +1011,7 @@ calculate_perturbed_interval() {
 #   update_whitelist_runner
 #
 update_whitelist_runner() {
+    local run_hour="$1"
     # Background loop running task at AUTO_UPDATE_HOUR daily
 
     if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
@@ -1008,9 +1019,9 @@ update_whitelist_runner() {
         while true; do
             # Calculate now and next AUTO_UPDATE_HOUR
             now=$(date +%s)
-            target=$(date -d "today $AUTO_UPDATE_HOUR" +%s)
+            target=$(date -d "today $run_hour" +%s)
             if ((now >= target)); then
-                target=$(date -d "tomorrow $AUTO_UPDATE_HOUR" +%s)
+                target=$(date -d "tomorrow $run_hour" +%s)
             fi
             sleep $((target - now))
 
@@ -1018,7 +1029,7 @@ update_whitelist_runner() {
             echo "Running whitelist update script: $SCRIPT_DIR/extract-good-ips-from-block-list.sh"
             script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
             log "Whitelist update script output: $script_output"
-            echo "$script_output" >>"$SCRIPT_DIR/whitelist_update.log"
+            echo "$script_output" >"$SCRIPT_DIR/whitelist_update.log"
             sudo chown "$LOCAL_USER_AND_GROUP" "$SCRIPT_DIR/whitelist_update.log"
             sudo chmod 666 "$SCRIPT_DIR/whitelist_update.log"
         done
@@ -1063,9 +1074,9 @@ update_whitelist_runner() {
 # - All background processes are terminated on script exit via the 'cleanup' function.
 #
 # Dependencies:
-# - Functions: log, start_web_server, create_webpage, encode, consolidate_ips, update_whitelist_runner, start_monitor, 
+# - Functions: log, start_web_server, create_webpage, encode, consolidate_ips, update_whitelist_runner, start_monitor,
 #   share_block_list_via_HTTP, calculate_perturbed_interval, update_analysis, cleanup
-# 
+#
 log "**************** Starting Snort Monitor Service ****************"
 log "Starting alert web server on port $WEB_PORT"
 start_web_server &
@@ -1077,9 +1088,11 @@ create_webpage "false" "$(encode $WEBPAGE_EXPIRATION_GRACE)" "$(encode "Waiting 
 first_time=true
 consolidate_ips
 
-# Start the whitelist updater in background
-update_whitelist_runner &
-WHITELIST_UPDATER_PID=$!
+# Start the whitelist updaters in the background
+update_whitelist_runner $AUTO_UPDATE_HOUR_1 &
+WHITELIST_UPDATER_1_PID=$!
+update_whitelist_runner $AUTO_UPDATE_HOUR_2 &
+WHITELIST_UPDATER_2_PID=$!
 
 # Start the log monitor in background
 start_monitor >/dev/null 2>&1 &
@@ -1094,7 +1107,8 @@ trap cleanup EXIT
 
 log "Alert Web server started with PID: $ALERT_WEB_SERVER_PID"
 log "Block list monitor running (PID: $MONITOR_PID)"
-log "Whitelist updater running (PID: $WHITELIST_UPDATER_PID)"
+log "Whitelist updater #1 ($AUTO_UPDATE_HOUR_1) running (PID: $WHITELIST_UPDATER_1_PID)"
+log "Whitelist updater #2 ($AUTO_UPDATE_HOUR_2) running (PID: $WHITELIST_UPDATER_2_PID)"
 log "Block list web server running (PID: $BLOCK_LIST_WEB_SERVER_PID)"
 log "Whitelist file: $WHITELIST_FILE"
 log "Block-list file: $CONSOLIDATED_FILE"

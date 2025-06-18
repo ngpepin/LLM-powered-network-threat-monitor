@@ -51,6 +51,10 @@
 # - No IPs meet the filtering criteria.
 # - Whitelist remains unchanged after processing.
 #
+# Dependencies:
+# - `xsv` (optional, for CSV rendering and processing) - https://github.com/BurntSushi/xsv?tab=readme-ov-file
+# - `csvlook` (optional, for pretty-printing CSV content) - part of the `csvkit` package., e.g., sudo apt install csvkit
+#
 # Usage:
 # ------
 # Run this script as part of the snort-monitor suite to maintain an up-to-date whitelist of safe IPs, automatically cross-checked against external threat intelligence sources.
@@ -68,6 +72,25 @@ if [[ -f "$SCRIPT_DIR/snort-monitor.conf" ]]; then
   source "$SCRIPT_DIR/snort-monitor.conf"
 fi
 
+# Function:
+# filter_ips()
+#
+# Filters IP addresses from CSV content based on confidence and reports thresholds.
+#
+# Arguments:
+#   $1 - CSV content as a string. The CSV is expected to have a header row,
+#        with at least three columns: IP, confidence, and reports.
+#
+# Environment Variables:
+#   CONFIDENCE_THRESHOLD - Maximum allowed value for the confidence column.
+#   REPORTS_THRESHOLD    - Maximum allowed value for the reports column.
+#
+# Behavior:
+#   - Skips the header row.
+#   - Skips rows where the second field contains "ERROR:" (e.g., rate limit messages).
+#   - Removes surrounding double quotes from the confidence and reports fields.
+#   - Prints the IP address (first column) if both confidence and reports are
+#     less than or equal to their respective thresholds.
 filter_ips() {
   local csv_content="$1"
   printf '%s\n' "$csv_content" | awk -F',' -v conf="$CONFIDENCE_THRESHOLD" -v rep="$REPORTS_THRESHOLD" '
@@ -89,6 +112,76 @@ sep_dashes() {
 }
 sep_double() {
   printf '%*s\n' "$separator_characters" '' | tr ' ' '='
+}
+
+# Function:
+# generate_integer_range_regex()
+#
+# Generates a regular expression matching integers within a specified range. Used to dynamically
+# create regex patterns for use with xsv search filetering
+#
+# Usage:
+#   generate_integer_range_regex MIN MAX
+#
+# Arguments:
+#   MIN   The minimum integer value in the range (inclusive).
+#   MAX   The maximum integer value in the range (inclusive).
+#
+# Description:
+#   This function outputs a regular expression pattern that matches any integer
+#   between MIN and MAX, inclusive. If MIN and MAX are equal, the pattern matches
+#   only that single integer. The function validates that both arguments are integers
+#   and that MIN is less than or equal to MAX.
+#
+# Returns:
+#   0 on success, 1 on error (invalid input).
+#
+# Output:
+#   Prints the generated regular expression to stdout.
+#
+# Examples:
+#   generate_integer_range_regex 3 5
+#     Output: ^(3|4|5)$
+#
+#   generate_integer_range_regex 7 7
+#     Output: ^7$
+#
+generate_integer_range_regex() {
+  local min=$1
+  local max=$2
+
+  # Validate input
+  if ! [[ "$min" =~ ^-?[0-9]+$ ]] || ! [[ "$max" =~ ^-?[0-9]+$ ]]; then
+    echo "Error: Both arguments must be integers" >&2
+    return 1
+  fi
+
+  if ((min > max)); then
+    echo "Error: Minimum must be less than or equal to maximum" >&2
+    return 1
+  fi
+
+  # Special case: single number
+  if ((min == max)); then
+    echo "^$min$"
+    return 0
+  fi
+
+  # Generate the regex pattern
+  local pattern="^("
+
+  for ((i = min; i <= max; i++)); do
+    if ((i == max)); then
+      pattern+="$i"
+    else
+      pattern+="$i|"
+    fi
+  done
+
+  pattern+=")\$"
+
+  echo "$pattern"
+  return 0
 }
 
 WHITELIST_start_count=$(cat "$WHITELIST_FILE" | sed '/^$/d' | wc -l)
@@ -123,30 +216,50 @@ else
     exit 0
   else
     echo "Created ${CSV_line_count}-row CSV file containing the ABUSEIPDB risk assessment: $csv_file"
-    ABUSEIPDB_assessment="$(cat "$csv_file" | tail -n +2 | sort)"
     echo "Content follows:"
-    printf '%s\n' "$ABUSEIPDB_assessment"
+
+    # Use xsv and csvlook to output the CSV content in a table format
+    whole_table="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
+      xsv sort -N -s '% Confidence of Abuse','Total Reports within  days' |
+      xsv table | csvlook 2>/dev/null)"
+    dash_width=$(($(head -n 1 <<<"$whole_table" | wc -m) - 3))
+    dashes="+$(printf '%*s' "$dash_width" '' | tr ' ' '-')+"
+    printf '%s\n%s\n%s\n' "$dashes" "$whole_table" "$dashes"
+    # OR, if xsv/csvlook not available, use cat "$ABUSEIPDB_assessment" | perl -pe 's/((?<=,)|(?<=^)),/ ,/g;' | column -t -s,
+    # OR use printf '%s\n' "$ABUSEIPDB_assessment for vanilla output
 
     # STEP 3: Filter the IPs based on the ABUSEIPDB assessment and thresholds
     sep_dashes # ----------------
-    echo "Filtering IPs based on ABUSEIPDB assessment and thresholds of maximum $CONFIDENCE_THRESHOLD confidence of abuse"
-    echo "and maximum $REPORTS_THRESHOLD reports of abuse..."
-    filtered_ips="$(filter_ips "$ABUSEIPDB_assessment")"
+    echo "Filtering IPs based on ABUSEIPDB assessment and thresholds of maximum ${CONFIDENCE_THRESHOLD}% confidence of abuse and a maximum of $REPORTS_THRESHOLD discrete reports of abuse..."
 
-    # STEP 4: Add the filtered IPs to the whitelist file, backing it up first
-    sep_dashes # ----------------
+    ABUSEIPDB_assessment="$(cat "$csv_file")"
+    filtered_ips="$(filter_ips "$ABUSEIPDB_assessment")"
     FILTERED_IP_line_count=$(echo "$filtered_ips" | sed '/^$/d' | wc -l)
+
     if [[ $FILTERED_IP_line_count -eq 0 ]]; then
-      echo "No IPs were found that match the criteria. Exiting."
+      echo "> no IPs were found that match those criteria. Exiting."
       sep_double # ================
       exit 0
     else
+      # STEP 4: Add the filtered IPs to the whitelist file, backing it up first
+
+      # Use xsv and csvlook to filter the CSV content and output in a nice format
+      conf_filter_regex=$(generate_integer_range_regex 0 $CONFIDENCE_THRESHOLD)
+      conf_reports_regex=$(generate_integer_range_regex 0 $REPORTS_THRESHOLD)
+      filtered_table="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
+        xsv sort -N -s '% Confidence of Abuse','Total Reports within  days' |
+        xsv search -s '% Confidence of Abuse' "$conf_filter_regex" |
+        xsv search -s 'Total Reports within  days' "$conf_reports_regex" | xsv table | csvlook 2>/dev/null)"
+      dash_width=$(($(head -n 1 <<<"$filtered_table" | wc -m) - 3))
+      dashes="+$(printf '%*s' "$dash_width" '' | tr ' ' '-')+"
+      printf '%s\n%s\n%s\n' "$dashes" "$filtered_table" "$dashes"
 
       TEMP_FILE=$(mktemp)
       cat "$WHITELIST_FILE" >"$TEMP_FILE"
       echo "" >>"$TEMP_FILE"
 
       # STEP 5: Print and add the filtered IPs to the temporary file which contains the current whitelist, then sort and remove duplicates
+      sep_dashes # ----------------
       echo "The following $FILTERED_IP_line_count IP(s) are considered safe by ABUSEIPDB and will be added to the whitelist file"
       echo "(but only if they are NEW):"
       printf '%s\n' "$filtered_ips" | tee -a "$TEMP_FILE"
