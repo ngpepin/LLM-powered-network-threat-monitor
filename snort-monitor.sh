@@ -5,6 +5,7 @@
 # shellcheck disable=SC1091
 # shellcheck disable=SC2086
 # shellcheck disable=SC2001
+# shellcheck disable=SC1090
 ###############################################################################
 #
 # snort-monitor.sh
@@ -553,10 +554,14 @@ is_public_ip() {
 #   delete_old_block_lists
 #
 delete_old_block_lists() {
+    local files_deleted="false"
     log "Performing cleanup of block list files older than $DELETE_BLOCK_LISTS_AFTER days"
-    find "$BLOCK_LIST_DIR" -type f -mtime +"$DELETE_BLOCK_LISTS_AFTER" -delete -print | while read -r deleted_file; do
+    local deleted_any_file="false"
+    while IFS= read -r deleted_file; do
         log "> deleted old block list file: $deleted_file"
-    done
+        deleted_any_file="true"
+    done < <(find "$BLOCK_LIST_DIR" -type f -mtime +"$DELETE_BLOCK_LISTS_AFTER" -delete -print)
+    echo "$deleted_any_file"
 }
 
 # -----------------------------------------------------------------------------
@@ -799,9 +804,9 @@ update_analysis() {
         rm -f "$temp_ntopng_in_file" "$temp_ntopng_out_file"
 
         log_lines=$(
-            echo "Snort logs:\n"
+            printf "Snort logs:\n"
             echo "$log_lines_snort"
-            echo "ntopng logs:\n"
+            printf "ntopng logs:\n"
             echo "$log_lines_ntopng"
         )
         escaped_snort_log_lines=$(echo "$log_lines_snort" | escape_html)
@@ -837,7 +842,7 @@ update_analysis() {
             max_tokens: 120000 
         }')
 
-        echo "Last request JSON for Analysis:\n $request_json" >"$SCRIPT_DIR/last_analysis_request.log"
+        printf "Last request JSON for Analysis:\n%s\n" "$request_json" >"$SCRIPT_DIR/last_analysis_request.log"
 
         # Call the API with a request for an analysis
         response=$(curl -s -X POST "$API_ENDPOINT" \
@@ -921,7 +926,7 @@ The following IPs have already been blocked: $blocked_ips" \
                }'
             )
 
-            echo "Last request JSON for blocked IPs:\n $request_json" >"$SCRIPT_DIR/last_IPs_to_block_request.log"
+            printf "Last request JSON for blocked IPs:\n%s\n" "$request_json" >"$SCRIPT_DIR/last_IPs_to_block_request.log"
 
             response=$(curl -s -X POST "$API_ENDPOINT" \
                 -H "Content-Type: application/json" \
@@ -1025,8 +1030,10 @@ calculate_perturbed_interval() {
 #
 update_whitelist_runner() {
     local run_hour="$1"
-    # Background loop running task at AUTO_UPDATE_HOUR daily
 
+    local files_deleted=false
+
+    # Background loop running task at run_hour daily
     if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
         local script_output=""
         while true; do
@@ -1038,7 +1045,15 @@ update_whitelist_runner() {
             fi
             sleep $((target - now))
 
-            log "Auto-updating whitelist now"
+            log "Auto-updating whitelist now..."
+
+            # Delete old block list files
+            files_deleted=$(delete_old_block_lists)
+            if [ "$files_deleted" = true ]; then
+                consolidate_ips
+            fi
+
+            # Run the whitelist update script
             echo "Running whitelist update script: $SCRIPT_DIR/extract-good-ips-from-block-list.sh"
             script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
             log "Whitelist update script output: $script_output"
@@ -1048,8 +1063,6 @@ update_whitelist_runner() {
         done
     fi
 
-    # Delete old block list files
-    delete_old_block_lists
 }
 
 # -----------------------------------------------------------------------------
