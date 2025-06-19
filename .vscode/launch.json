@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Debug Bash Script",
+      "program": "${workspaceFolder}/${input:scriptName}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "scriptName",
+      "type": "pickString",
+      "description": "Select the Bash script to debug",
+      "options": [
+        "snort-monitor.sh",
+        "audit-consolidated-block-list.sh",
+        "check-block-list.sh",
+        "check-list.sh",
+        "check-whitelist.sh",
+        "convert-to-CIDR.sh",
+        "custom-init.sh",
+        "extract-good-ips-from-block-list.sh",
+        "force-pfsense-ntopng-update.sh",
+        "ntopng-log-to-csv.sh",
+        "reinit-monitoring.sh",
+        "resolve-ntopng-log.sh"
+      ]
+    }
+  ]
+}

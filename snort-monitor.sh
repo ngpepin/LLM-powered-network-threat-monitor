@@ -152,10 +152,10 @@ INTERVAL_PERTURBATION_MAX=1.4 # Maximum perturbation coefficient for interval
 WEBPAGE_EXPIRATION_GRACE=10   # Grace period for webpage expiration allowing LLM API query/ies to take place (in seconds)
 
 # Web server configuration
-WEB_PORT=9999                  # Port for the Analysis web server
-LOG_LINES_TO_SHOW=120          # Number of log lines to provide to the LLM and show on the webpage
-BLOCK_LIST_WEB_PORT=9998       # Port for the Block List web server
-DELETE_BLOCK_LISTS_AFTER=99999 # Number of days to keep the block list files before deleting them
+WEB_PORT=9999               # Port for the Analysis web server
+LOG_LINES_TO_SHOW=120       # Number of log lines to provide to the LLM and show on the webpage
+BLOCK_LIST_WEB_PORT=9998    # Port for the Block List web server
+DELETE_BLOCK_LISTS_AFTER=14 # Number of days to keep the block list files before deleting them
 
 # Execute custom initialization code if exists
 if [[ -f "$SCRIPT_DIR/custom-init.sh" ]]; then
@@ -541,6 +541,24 @@ is_public_ip() {
     return 0
 }
 
+# Deletes block list files older than a specified number of days from the block list directory.
+# Logs the cleanup operation and each deleted file.
+#
+# Globals:
+#   BLOCK_LIST_DIR - Directory containing block list files.
+#   DELETE_BLOCK_LISTS_AFTER - Number of days after which files should be deleted.
+#   log - Function used for logging messages.
+#
+# Usage:
+#   delete_old_block_lists
+#
+delete_old_block_lists() {
+    log "Performing cleanup of block list files older than $DELETE_BLOCK_LISTS_AFTER days"
+    find "$BLOCK_LIST_DIR" -type f -mtime +"$DELETE_BLOCK_LISTS_AFTER" -delete -print | while read -r deleted_file; do
+        log "> deleted old block list file: $deleted_file"
+    done
+}
+
 # -----------------------------------------------------------------------------
 # Function: consolidate_ips
 # -----------------------------------------------------------------------------
@@ -604,7 +622,8 @@ consolidate_ips() {
         sort -u -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n "$TEMP_FILTERED_IPS" >"$CONSOLIDATED_FILE.tmp"
         # Only update if the new content differs
         if ! cmp -s "$CONSOLIDATED_FILE.tmp" "$CONSOLIDATED_FILE"; then
-            mv "$CONSOLIDATED_FILE.tmp" "$CONSOLIDATED_FILE"
+            cat "$CONSOLIDATED_FILE.tmp" >"$CONSOLIDATED_FILE"
+            rm -f "$CONSOLIDATED_FILE.tmp"
             log "Consolidated block list updated. Requesting pfSense block-list reload."
             sleep 1
             $SCRIPT_DIR/force-pfsense-ntopng-update.sh &
@@ -625,12 +644,6 @@ consolidate_ips() {
 # Background monitoring function
 start_monitor() {
     log "Starting block list monitor"
-
-    # Initial cleanup of old files
-    log "Performing initial cleanup of files older than $DELETE_BLOCK_LISTS_AFTER days"
-    find "$BLOCK_LIST_DIR" -type f -mtime +"$DELETE_BLOCK_LISTS_AFTER" -delete -print | while read -r deleted_file; do
-        log "Deleted old file: $deleted_file"
-    done
 
     # Use inotifywait to monitor only for new files
     inotifywait -m -q -e create -e moved_to --format "%w%f" "$BLOCK_LIST_DIR" |
@@ -1034,6 +1047,9 @@ update_whitelist_runner() {
             sudo chmod 666 "$SCRIPT_DIR/whitelist_update.log"
         done
     fi
+
+    # Delete old block list files
+    delete_old_block_lists
 }
 
 # -----------------------------------------------------------------------------
@@ -1086,6 +1102,7 @@ create_webpage "false" "$(encode $WEBPAGE_EXPIRATION_GRACE)" "$(encode "Waiting 
 
 # Initial block list consolidation
 first_time=true
+delete_old_block_lists
 consolidate_ips
 
 # Start the whitelist updaters in the background
