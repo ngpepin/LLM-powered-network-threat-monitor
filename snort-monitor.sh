@@ -79,7 +79,7 @@ MODEL=""                                        # OpenAI model to use (sourced f
 UPDATE_INTERVAL=99999            # Interval to check for new logs (in seconds)
 AUTO_UPDATE_WHITELIST_BOOL=false # Whether to automatically update the whitelist
 AUTO_UPDATE_HOUR_1="02:00"       # Time of day to update the whitelist #1 (24-hour format, e.g., "14:30" for 2:30 PM)
-AUTO_UPDATE_HOUR_2="12:00"       # Time of day to update the whitelist #2 (24-hour format, e.g., "14:30" for 2:30 PM)
+AUTO_UPDATE_HOUR_2="14:00"       # Time of day to update the whitelist #2 (24-hour format, e.g., "14:30" for 2:30 PM)
 LOCAL_USER_AND_GROUP=""          # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 
 # Override this default prompt text in snort-monitor.conf if you wish:
