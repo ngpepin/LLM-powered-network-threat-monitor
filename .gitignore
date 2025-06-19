@@ -22,3 +22,5 @@ bulk-check/
 /force-pfsense-ntopng-update.sh
 /reinit-monitoring.sh
 reinit-monitoring.sh
+.vscode
+.vscode/launch.json
