@@ -217,6 +217,8 @@ else
     sep_dashes # ----------------
     echo "The same list but with $net_count IP(s) from the blacklist file ($BLACKLIST_FILE) removed (count=$blacklist_removed_line_count):"
     cat "$blacklist_removed_tmp_file"
+  else
+    echo "The list excludes IPs from the blacklist file ($BLACKLIST_FILE)."
   fi
 
   # STEP 3: Run the ABUSEIPDB bulk IP check on the remaining IPs
@@ -279,7 +281,7 @@ else
       printf '%s\n%s\n%s\n' "$dashes" "$filtered_table" "$dashes"
 
       TEMP_FILE=$(mktemp)
-      cat "$WHITELIST_FILE" >"$TEMP_FILE"
+      grep -vxFf "$BLACKLIST_FILE" "$WHITELIST_FILE" >"$TEMP_FILE"
       echo "" >>"$TEMP_FILE"
 
       # STEP 6: Print and add the filtered IPs to the temporary file which contains the current whitelist, then sort and remove duplicates
