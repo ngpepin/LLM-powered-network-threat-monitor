@@ -3,6 +3,7 @@
 BLOCK_LIST_DIR="$SCRIPT_DIR/block-lists"                                 # Directory to store block lists in
 CONSOLIDATED_FILE_SHARE="$SCRIPT_DIR/consolidated-block-list"            # Consolidated block list directory (samba share)
 CONSOLIDATED_FILE="$CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt" # Consolidated block list file
+BLACKLIST_FILE="$SCRIPT_DIR/ip-blacklist.txt"                            # IP blacklist file
 WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist.txt"                            # IP whitelist file
 REPORTS_DIR="$SCRIPT_DIR/reports"                                        # Directory to store PDF reports in
 WEB_DIR="/var/www/snort-monitor"                                         # Directory for web files
