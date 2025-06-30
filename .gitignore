@@ -25,3 +25,4 @@ reinit-monitoring.sh
 .vscode
 .vscode/launch.json
 enumerate-pline.sh
+analysis-tools/velop-status-report.md
