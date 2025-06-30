@@ -24,3 +24,4 @@ bulk-check/
 reinit-monitoring.sh
 .vscode
 .vscode/launch.json
+enumerate-pline.sh

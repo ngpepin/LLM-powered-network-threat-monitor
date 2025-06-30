@@ -61,8 +61,8 @@
 #
 
 # Constants
-CONFIDENCE_THRESHOLD=3
-REPORTS_THRESHOLD=9
+CONFIDENCE_THRESHOLD=20
+REPORTS_THRESHOLD=20
 WHITELIST_FILE="$HOME/.snort-monitor/whitelist.txt"
 separator_characters=155
 
@@ -225,6 +225,13 @@ else
     dash_width=$(($(head -n 1 <<<"$whole_table" | wc -m) - 3))
     dashes="+$(printf '%*s' "$dash_width" '' | tr ' ' '-')+"
     printf '%s\n%s\n%s\n' "$dashes" "$whole_table" "$dashes"
+    alpha_whole_table="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
+      xsv sort -N -s '% Confidence of Abuse','Total Reports within  days' |
+      xsv sort -s 'Domain' |
+      xsv table | csvlook 2>/dev/null)"
+    echo ""
+    echo "The same table sorted first by Domain follows:"
+    printf '%s\n%s\n%s\n' "$dashes" "$alpha_whole_table" "$dashes"
     # OR, if xsv/csvlook not available, use cat "$ABUSEIPDB_assessment" | perl -pe 's/((?<=,)|(?<=^)),/ ,/g;' | column -t -s,
     # OR use printf '%s\n' "$ABUSEIPDB_assessment for vanilla output
 

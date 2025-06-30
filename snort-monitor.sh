@@ -1047,12 +1047,6 @@ update_whitelist_runner() {
 
             log "Auto-updating whitelist now..."
 
-            # Delete old block list files
-            files_deleted=$(delete_old_block_lists)
-            if [ "$files_deleted" = true ]; then
-                consolidate_ips
-            fi
-
             # Run the whitelist update script
             echo "Running whitelist update script: $SCRIPT_DIR/extract-good-ips-from-block-list.sh"
             script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
@@ -1060,6 +1054,13 @@ update_whitelist_runner() {
             echo "$script_output" >"$SCRIPT_DIR/whitelist_update.log"
             sudo chown "$LOCAL_USER_AND_GROUP" "$SCRIPT_DIR/whitelist_update.log"
             sudo chmod 666 "$SCRIPT_DIR/whitelist_update.log"
+
+            # Delete old block list files
+            files_deleted=$(delete_old_block_lists)
+            if [ "$files_deleted" = true ]; then
+                consolidate_ips
+            fi
+
         done
     fi
 
