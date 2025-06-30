@@ -202,8 +202,7 @@ else
   echo "Content follows:"
   cat "$latest_delta_file"
 
-  # STEP 2: Filter out IPs from blacklist
-  sep_dashes # ----------------
+  # STEP 2: Filter out IPs from mandatory blacklist
   blacklist_removed_tmp_file=$(mktemp)
   grep -vxFf "$BLACKLIST_FILE" "$latest_delta_file" >"$blacklist_removed_tmp_file"
   sed -i '/^$/d' "$blacklist_removed_tmp_file"
@@ -213,12 +212,14 @@ else
     sep_double # ================
     rm -f "$blacklist_removed_tmp_file"
     exit 0
-  else
-    echo "The same list but with IPs from the blacklist file ($BLACKLIST_FILE) removed (count=$blacklist_removed_line_count):"
+  elif [[ $blacklist_removed_line_count -lt $delta_line_count ]]; then
+    net_count=$((delta_line_count - blacklist_removed_line_count))
+    sep_dashes # ----------------
+    echo "The same list but with $net_count IP(s) from the blacklist file ($BLACKLIST_FILE) removed (count=$blacklist_removed_line_count):"
     cat "$blacklist_removed_tmp_file"
   fi
 
-  # STEP 3: Run the ABUSEIPDB bulk IP check on the latest delta file
+  # STEP 3: Run the ABUSEIPDB bulk IP check on the remaining IPs
   sep_dashes # ----------------
   echo "Running ABUSEIPDB bulk IP check on these IPs to confirm that they are safe..."
   csv_file="${latest_delta_file%.*}.csv"
@@ -283,7 +284,7 @@ else
 
       # STEP 6: Print and add the filtered IPs to the temporary file which contains the current whitelist, then sort and remove duplicates
       sep_dashes # ----------------
-      echo "The following $FILTERED_IP_line_count IP(s) are considered safe by ABUSEIPDB and will be added to the whitelist file"
+      echo "The following $FILTERED_IP_line_count IP(s) are considered safe, given the criteria, by ABUSEIPDB and will be added to the whitelist file"
       echo "(but only if they are NEW):"
       printf '%s\n' "$filtered_ips" | tee -a "$TEMP_FILE"
       TEMP_FILE_2=$(mktemp)
