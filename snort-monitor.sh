@@ -592,6 +592,9 @@ consolidate_ips() {
     # Create empty whitelist if file doesn't exist
     [ -f "$WHITELIST_FILE" ] || touch "$WHITELIST_FILE"
 
+    # create fake block list file from blacklist file to ensure includion of these IPs in the consolidation
+    cat "$BLACKLIST_FILE" > "$BLOCK_LIST_DIR/block-list-1900-01-01_00-00-00.txt"
+
     # Temporary files for processing
     TEMP_ALL_IPS=$(mktemp)
     TEMP_VALID_IPS=$(mktemp)

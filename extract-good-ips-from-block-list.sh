@@ -202,12 +202,28 @@ else
   echo "Content follows:"
   cat "$latest_delta_file"
 
-  # STEP 2: Run the ABUSEIPDB bulk IP check on the latest delta file
+  # STEP 2: Filter out IPs from blacklist
+  sep_dashes # ----------------
+  blacklist_removed_tmp_file=$(mktemp)
+  grep -vxFf "$BLACKLIST_FILE" "$latest_delta_file" >"$blacklist_removed_tmp_file"
+  sed -i '/^$/d' "$blacklist_removed_tmp_file"
+  blacklist_removed_line_count=$(cat "$blacklist_removed_tmp_file" | wc -l)
+  if [[ $blacklist_removed_line_count -eq 0 ]]; then
+    echo "No IPs were left after removing those in the blacklist file. Exiting."
+    sep_double # ================
+    rm -f "$blacklist_removed_tmp_file"
+    exit 0
+  else
+    echo "The same list but with IPs from the blacklist file ($BLACKLIST_FILE) removed (count=$blacklist_removed_line_count):"
+    cat "$blacklist_removed_tmp_file"
+  fi
+
+  # STEP 3: Run the ABUSEIPDB bulk IP check on the latest delta file
   sep_dashes # ----------------
   echo "Running ABUSEIPDB bulk IP check on these IPs to confirm that they are safe..."
   csv_file="${latest_delta_file%.*}.csv"
-
-  $SCRIPT_DIR/ABUSEIPDB/ABUSEIPDB-bulk-ip-check.sh "$latest_delta_file" "$csv_file"
+  $SCRIPT_DIR/ABUSEIPDB/ABUSEIPDB-bulk-ip-check.sh "$blacklist_removed_tmp_file" "$csv_file"
+  rm -f "$blacklist_removed_tmp_file"
   sed -i '/^$/d' "$csv_file"
   CSV_line_count=$(cat "$csv_file" | tail -n +2 | wc -l)
   if [[ $CSV_line_count -eq 0 ]]; then
@@ -235,7 +251,7 @@ else
     # OR, if xsv/csvlook not available, use cat "$ABUSEIPDB_assessment" | perl -pe 's/((?<=,)|(?<=^)),/ ,/g;' | column -t -s,
     # OR use printf '%s\n' "$ABUSEIPDB_assessment for vanilla output
 
-    # STEP 3: Filter the IPs based on the ABUSEIPDB assessment and thresholds
+    # STEP 4: Filter the IPs based on the ABUSEIPDB assessment and thresholds
     sep_dashes # ----------------
     echo "Filtering IPs based on ABUSEIPDB assessment and thresholds of maximum ${CONFIDENCE_THRESHOLD}% confidence of abuse and a maximum of $REPORTS_THRESHOLD discrete reports of abuse..."
 
@@ -248,7 +264,7 @@ else
       sep_double # ================
       exit 0
     else
-      # STEP 4: Add the filtered IPs to the whitelist file, backing it up first
+      # STEP 5: Add the filtered IPs to the whitelist file, backing it up first
 
       # Use xsv and csvlook to filter the CSV content and output in a nice format
       conf_filter_regex=$(generate_integer_range_regex 0 $CONFIDENCE_THRESHOLD)
@@ -265,7 +281,7 @@ else
       cat "$WHITELIST_FILE" >"$TEMP_FILE"
       echo "" >>"$TEMP_FILE"
 
-      # STEP 5: Print and add the filtered IPs to the temporary file which contains the current whitelist, then sort and remove duplicates
+      # STEP 6: Print and add the filtered IPs to the temporary file which contains the current whitelist, then sort and remove duplicates
       sep_dashes # ----------------
       echo "The following $FILTERED_IP_line_count IP(s) are considered safe by ABUSEIPDB and will be added to the whitelist file"
       echo "(but only if they are NEW):"
