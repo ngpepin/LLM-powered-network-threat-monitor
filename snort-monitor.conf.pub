@@ -1,5 +1,6 @@
 # Configuration variables
 
+PFSENSE_FW_IP="999.999.999.999"                                          # IP address of the pfSense firewall
 BLOCK_LIST_DIR="$SCRIPT_DIR/block-lists"                                 # Directory to store block lists in
 CONSOLIDATED_FILE_SHARE="$SCRIPT_DIR/consolidated-block-list"            # Consolidated block list directory (samba share)
 CONSOLIDATED_FILE="$CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt" # Consolidated block list file

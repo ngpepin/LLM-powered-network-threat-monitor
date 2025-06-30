@@ -593,7 +593,7 @@ consolidate_ips() {
     [ -f "$WHITELIST_FILE" ] || touch "$WHITELIST_FILE"
 
     # create fake block list file from blacklist file to ensure includion of these IPs in the consolidation
-    cat "$BLACKLIST_FILE" > "$BLOCK_LIST_DIR/block-list-1900-01-01_00-00-00.txt"
+    cat "$BLACKLIST_FILE" >"$BLOCK_LIST_DIR/block-list-1900-01-01_00-00-00.txt"
 
     # Temporary files for processing
     TEMP_ALL_IPS=$(mktemp)
@@ -1158,6 +1158,13 @@ while true; do
         expiration_time=$(printf "%.0f" "$((perturbed_interval + WEBPAGE_EXPIRATION_GRACE))")
     fi
 
-    update_analysis "$(encode $expiration_time)"
+    # ping PFSENSE_FW_IP to check that it is available
+    if ping -c 1 "$PFSENSE_FW_IP" >/dev/null 2>&1; then
+        log "pfSense firewall is available, proceeding with analysis update."
+        update_analysis "$(encode $expiration_time)"
+    else
+        log "pfSense firewall is not available, skipping analysis update."
+    fi
+
     sleep "$perturbed_interval"
 done
