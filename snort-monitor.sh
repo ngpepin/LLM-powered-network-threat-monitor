@@ -169,6 +169,8 @@ last_log_content=""
 last_response=""
 last_update_time=""
 
+pfsense_availability_message=""
+
 # Create directories if they don't exist
 mkdir -p "$WEB_DIR"
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -392,13 +394,13 @@ create_webpage() {
     local snort_log_updated_time="$(decode "$7")" # Snort log last updated time
 
     if [ -z "$analysis" ]; then
-        analysis="<p>No analysis available</p>" # Default analysis content
+        analysis="<p>No analysis available. $pfsense_availability_message</p>" # Default analysis content
     fi
     if [ -z "$log_content" ]; then
-        log_content="No log content available" # Default log content
+        log_content="No log content available. $pfsense_availability_message" # Default log content
     fi
     if [ -z "$api_response" ]; then
-        api_response="No API response available" # Default API response content
+        api_response="No API response available." # Default API response content
     fi
 
     local update_time="n/a"
@@ -447,7 +449,7 @@ create_webpage() {
             update_status+=" (Last attempt: $error)"
         fi
     fi
-    update_status+="<br>Snort logs last modified: $snort_log_updated_time_str <br>Webpage expires: $expire_time_str_short</p>"
+    update_status+="<br>Snort logs last modified: $snort_log_updated_time_str $pfsense_availability_message<br>Webpage expires: $expire_time_str_short</p>"
 
     # Create the full HTML page
     cat <<EOF >"$WEB_DIR/index.html"
@@ -1115,7 +1117,14 @@ log "Starting alert web server on port $WEB_PORT"
 start_web_server &
 ALERT_WEB_SERVER_PID=$!
 sleep 2
-create_webpage "false" "$(encode $WEBPAGE_EXPIRATION_GRACE)" "$(encode "Waiting for the first log analysis...")" "$(encode "Waiting for the first log analysis...")" "" "" ""
+
+if ping -c 1 "$PFSENSE_FW_IP" >/dev/null 2>&1; then
+    pfsense_availability_message=""
+else
+    pfsense_availability_message="pfSense firewall is not available."
+fi
+
+create_webpage "false" "$(encode $WEBPAGE_EXPIRATION_GRACE)" "$(encode "Waiting for the first log analysis... $pfsense_availability_message")" "$(encode "Waiting for the first log analysis... $pfsense_availability_message")" "" "" ""
 
 # Initial block list consolidation
 first_time=true
@@ -1161,9 +1170,11 @@ while true; do
     # ping PFSENSE_FW_IP to check that it is available
     if ping -c 1 "$PFSENSE_FW_IP" >/dev/null 2>&1; then
         log "pfSense firewall is available, proceeding with analysis update."
+        pfsense_availability_message=""
         update_analysis "$(encode $expiration_time)"
     else
         log "pfSense firewall is not available, skipping analysis update."
+        pfsense_availability_message="pfSense firewall is not available."
     fi
 
     sleep "$perturbed_interval"

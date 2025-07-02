@@ -208,9 +208,12 @@ else
   sed -i '/^$/d' "$blacklist_removed_tmp_file"
   blacklist_removed_line_count=$(cat "$blacklist_removed_tmp_file" | wc -l)
   if [[ $blacklist_removed_line_count -eq 0 ]]; then
-    echo "No IPs were left after removing those in the blacklist file. Exiting."
-    sep_double # ================
+    echo "No IPs were left after removing those in the blacklist file."
+    echo "Blacklist follows:"
+    cat "$BLACKLIST_FILE"
+    echo "Exiting."
     rm -f "$blacklist_removed_tmp_file"
+    sep_double # ================
     exit 0
   elif [[ $blacklist_removed_line_count -lt $delta_line_count ]]; then
     net_count=$((delta_line_count - blacklist_removed_line_count))
@@ -220,6 +223,8 @@ else
   else
     echo "The list excludes IPs from the blacklist file ($BLACKLIST_FILE)."
   fi
+  echo "Blacklist follows:"
+  cat "$BLACKLIST_FILE"
 
   # STEP 3: Run the ABUSEIPDB bulk IP check on the remaining IPs
   sep_dashes # ----------------
@@ -251,6 +256,12 @@ else
     echo ""
     echo "The same table sorted first by Domain follows:"
     printf '%s\n%s\n%s\n' "$dashes" "$alpha_whole_table" "$dashes"
+    IP_table="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
+      xsv sort -N -s 'IP Address' |
+      xsv table | csvlook 2>/dev/null)"
+      echo ""
+    echo "The same table sorted by IP follows:"
+    printf '%s\n%s\n%s\n' "$dashes" "$IP_table" "$dashes"
     # OR, if xsv/csvlook not available, use cat "$ABUSEIPDB_assessment" | perl -pe 's/((?<=,)|(?<=^)),/ ,/g;' | column -t -s,
     # OR use printf '%s\n' "$ABUSEIPDB_assessment for vanilla output
 
