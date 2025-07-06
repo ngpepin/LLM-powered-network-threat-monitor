@@ -14,11 +14,15 @@ AUTO_UPDATE_HOUR_1="02:00"                                               # Time 
 AUTO_UPDATE_HOUR_2="12:00"                                               # Time of day to update the whitelist #2 (24-hour format, e.g., "14:30" for 2:30 PM)AUTO_UPDATE_WHITELIST_BOOL=false                                         # Whether to automatically update the whitelist at the above time
 LOCAL_USER_AND_GROUP="..."                                               # User and group for local file permissions
 
+# pfSense-specific parameters
 PFSENSE_DIR="/var/log/pfsense"                                           # Directory where pfSense logs are stored
 LOG_DIR="$PFSENSE_DIR/..."                                               # Directory for pfSense logs
 ALT_LOG_DIR="$PFSENSE_DIR/..."                                           # Alternate directory for pfSense logs
 SNORT_LOG="$LOG_DIR/snort.log"                                           # Snort log file
 NTOPNG_LOG="$ALT_LOG_DIR/ntopng.log"                                     # ntopng log file
+MONITOR_PFSENSE_THERMALS=false                                           # Whether to monitor pfSense thermal sensors
+PFSENSE_THERMALS_LOG="$SCRIPT_DIR/pfsense-thermal.log"                   # Path to the pfSense thermal log file
+PFSENSE_THERMALS_INTERVAL=10                                             # Interval to check pfSense thermal sensor (in seconds)
 
 API_ENDPOINT='...' # API endpoint for the AI service
 API_KEY="..."                                                            # OpenAI API key 

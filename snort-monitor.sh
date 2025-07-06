@@ -694,6 +694,9 @@ cleanup() {
     kill "$WHITELIST_UPDATER_2_PID" 2>/dev/null
     kill "$BLOCK_LIST_SERVER_PID" 2>/dev/null
     kill "$WEB_SERVER_PID" 2>/dev/null
+    if [ -n "$PFSENSE_THERMALS_MONITOR_PID" ]; then
+        kill "$PFSENSE_THERMALS_MONITOR_PID" 2>/dev/null
+    fi
     sleep 2
 
     # Check if the processes are still running
@@ -716,6 +719,12 @@ cleanup() {
     if ps -p "$WEB_SERVER_PID" >/dev/null; then
         log "Web server process is still running, stopping it..."
         kill -9 "$WEB_SERVER_PID"
+    fi
+    if [ -n "$PFSENSE_THERMALS_MONITOR_PID" ]; then
+        if ps -p "$PFSENSE_THERMALS_MONITOR_PID" >/dev/null; then
+            log "pfSense thermal monitor is still running, stopping it..."
+            kill -9 "$PFSENSE_THERMALS_MONITOR_PID"
+        fi
     fi
     sleep 2
     if ! ps -p "$MONITOR_PID" >/dev/null &&
@@ -1071,6 +1080,26 @@ update_whitelist_runner() {
 
 }
 
+log_pfsense_thermals() {
+    local thermal_status=""
+    while true; do
+        # Get the thermal status from pfSense
+        thermal_status=$("$SCRIPT_DIR/get-pfsense-thermal.sh")
+        # check if thermal_status is an integer
+        if ! [[ "$thermal_status" =~ ^-?[0-9]+$ ]]; then
+            log "Error: pfSense Thermal status is not a valid integer: $thermal_status"
+        else
+            # Log the thermal status with timestamp
+            log "pfSense thermal status: $thermal_status"
+            touch "$PFSENSE_THERMALS_LOG"
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - $thermal_status" >>"$PFSENSE_THERMALS_LOG"
+        fi
+
+        # Sleep for a defined interval before checking again
+        sleep "$PFSENSE_THERMALS_INTERVAL"
+    done
+}
+
 # -----------------------------------------------------------------------------
 # MAINLINE
 # -----------------------------------------------------------------------------
@@ -1144,6 +1173,15 @@ MONITOR_PID=$!
 log "Starting block list web server on port $BLOCK_LIST_WEB_PORT"
 share_block_list_via_HTTP &
 BLOCK_LIST_WEB_SERVER_PID=$!
+
+if [ "$MONITOR_PFSENSE_THERMALS" = true ]; then
+    log "Starting pfSense thermal status monitor"
+    log_pfsense_thermals &
+    PFSENSE_THERMALS_MONITOR_PID=$!
+else
+    log "pfSense thermal status monitoring is disabled."
+    PFSENSE_THERMALS_MONITOR_PID=""
+fi
 
 # Trap script exit to kill all background processes
 trap cleanup EXIT

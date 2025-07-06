@@ -1,0 +1,10 @@
+#!/bin/sh
+
+PFSENSE_IP="..."
+PFSENSE_PORT="..."
+PFSENSE_USER="..."
+PFSENSE_PASSWORD="..." 
+PFSENSE_CMD="sysctl -a | grep therm | head -n 2 | tail -n 1"
+output=$(sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_CMD")
+value="${output##*: }"
+echo "$value"

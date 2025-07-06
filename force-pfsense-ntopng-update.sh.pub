@@ -25,7 +25,7 @@
 PFSENSE_IP="..."
 PFSENSE_PORT="..."
 PFSENSE_USER="..."
-PFSENSE_PASSWORD="..." # consider using a more secure method for storing passwords
+PFSENSE_PASSWORD="..." 
 PFSENSE_NTOPNG_UPDATE_CMD="/usr/local/bin/php -f /usr/local/www/pfblockerng/pfblockerng.php cron"
 sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_NTOPNG_UPDATE_CMD"
 
