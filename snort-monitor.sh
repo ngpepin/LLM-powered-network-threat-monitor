@@ -1082,19 +1082,25 @@ update_whitelist_runner() {
 
 log_pfsense_thermals() {
     local thermal_status=""
+    local load_status=""
     while true; do
-        # Get the thermal status from pfSense
-        thermal_status=$("$SCRIPT_DIR/get-pfsense-thermal.sh")
+        # Get the thermal and load statuses from pfSense
+        read -r thermal_status load_status < <("$SCRIPT_DIR/get-pfsense-thermal.sh" -l)
+
         # check if thermal_status is an integer
         if ! [[ "$thermal_status" =~ ^-?[0-9]+$ ]]; then
             log "Error: pfSense Thermal status is not a valid integer: $thermal_status"
         else
-            # Log the thermal status with timestamp
-            log "pfSense thermal status: $thermal_status"
-            touch "$PFSENSE_THERMALS_LOG"
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - $thermal_status" >>"$PFSENSE_THERMALS_LOG"
+            if ! [[ "$load_status" =~ ^-?[0-9]+$ ]]; then
+                log "Error: pfSense Load status is not a valid integer: $load_status"
+            else
+                # Log the thermal status with timestamp
+                log "pfSense thermal status: $thermal_status"
+                log "pfSense load status: $load_status"
+                touch "$PFSENSE_THERMALS_LOG"
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - $thermal_status, $load_status" >>"$PFSENSE_THERMALS_LOG"
+            fi
         fi
-
         # Sleep for a defined interval before checking again
         sleep "$PFSENSE_THERMALS_INTERVAL"
     done

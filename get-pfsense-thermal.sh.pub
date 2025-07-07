@@ -1,10 +1,41 @@
 #!/bin/sh
 
+arg="$1"
+
+if [ "$arg" = "-l" ]; then
+    GET_LOAD=true
+else
+    GET_LOAD=false
+fi
+
 PFSENSE_IP="..."
 PFSENSE_PORT="..."
 PFSENSE_USER="..."
-PFSENSE_PASSWORD="..." 
+PFSENSE_PASSWORD="..."
+
+if [ "$GET_LOAD" = true ]; then
+
+    # Calculate CPU usage percentage using kern.cp_time
+    PFSENSE_CMD='sh -c '\''PREV=$(sysctl -n kern.cp_time); sleep 1; CURR=$(sysctl -n kern.cp_time); set -- $PREV; U1=$1; N1=$2; S1=$3; I1=$4; IRQ1=$5; set -- $CURR; U2=$1; N2=$2; S2=$3; I2=$4; IRQ2=$5; DU=$((U2 - U1)); DN=$((N2 - N1)); DS=$((S2 - S1)); DI=$((I2 - I1)); DIRQ=$((IRQ2 - IRQ1)); USED=$((DU + DN + DS)); TOTAL=$((DU + DN + DS + DI + DIRQ)); if [ $TOTAL -gt 0 ]; then echo $((100 * USED / TOTAL)); else echo 0; fi'\'''
+    load_value_usage=$(sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$PFSENSE_PORT" "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_CMD")
+
+    # Calculate 1 minute load average
+    PFSENSE_CMD='sysctl -n vm.loadavg | sed '\''s/[{}]//g'\'' | awk '\''{print $1}'\'''
+    output=$(sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_CMD")
+    # extract the 1 minute load value, multiply by 100 to get percent and divide by 2 cores
+    load_value_load=$(echo "$output" | awk '{print int($1 * 100 / 2)}')
+
+    # calculate integer value blending 40% CPU usage and 60% load average
+    load_value=$(((load_value_usage * 40 + load_value_load * 60) / 100))
+fi
+
+# Get the thermal value from pfSense
 PFSENSE_CMD="sysctl -a | grep therm | head -n 2 | tail -n 1"
 output=$(sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_CMD")
-value="${output##*: }"
-echo "$value"
+therm_value="${output##*: }"
+
+if [ "$GET_LOAD" = true ]; then
+    echo "${therm_value} ${load_value}"
+else
+    echo "$therm_value"
+fi
