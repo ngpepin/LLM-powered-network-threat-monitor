@@ -168,7 +168,37 @@ last_analysis=""
 last_log_content=""
 last_response=""
 last_update_time=""
+
+# State variable, flag file and get/set functions to control the auto-consolidation of block lists
 skip_auto_consolidation=false
+skip_auto_consolidation_flag_file="$(mktemp)"
+disable_auto_consolidation() {
+    log "Disabling auto consolidation of block lists"
+    if [[ ! -f "$skip_auto_consolidation_flag_file" ]]; then
+        skip_auto_consolidation_flag_file="$(mktemp)"
+    else
+        touch "$skip_auto_consolidation_flag_file"
+    fi
+    skip_auto_consolidation=false
+}
+enable_auto_consolidation() {
+    log "Enabling auto consolidation of block lists"
+    if [[ -f "$skip_auto_consolidation_flag_file" ]]; then
+        rm -f "$skip_auto_consolidation_flag_file" >/dev/null 2>&1
+    fi
+    skip_auto_consolidation=false
+}
+is_auto_consolidation_enabled() {
+    if [[ -f "$skip_auto_consolidation_flag_file" ]]; then
+        skip_auto_consolidation=true
+        log "Auto consolidation of block lists is disabled"
+        return 0
+    else
+        skip_auto_consolidation=false
+        log "Auto consolidation of block lists is enabled"
+        return 1
+    fi
+}
 
 pfsense_availability_message=""
 
@@ -649,7 +679,6 @@ consolidate_ips() {
 
     # Cleanup temp files
     rm -f "$TEMP_ALL_IPS" "$TEMP_VALID_IPS" "$TEMP_FILTERED_IPS"
-    log "Sleeping until next update cycle."
 }
 
 is_blocked() {
@@ -720,7 +749,7 @@ start_monitor() {
                 find "$BLOCK_LIST_DIR" -type f -mtime +"$DELETE_BLOCK_LISTS_AFTER" -delete -print | while read -r deleted_file; do
                     log "Deleted old file: $deleted_file"
                 done
-                if [ "$skip_auto_consolidation" = false ]; then
+                if is_auto_consolidation_enabled; then
                     log "Consolidating IPs from new file: $file"
                     consolidate_ips
                 else
@@ -760,6 +789,8 @@ cleanup() {
         kill "$PFSENSE_RESTART_PID" 2>/dev/null
     fi
     sleep 2
+
+    rm -f "$skip_auto_consolidation_flag_file" >/dev/null 2>&1
 
     # Check if the processes are still running
     if ps -p "$MONITOR_PID" >/dev/null; then
@@ -1034,15 +1065,19 @@ The following IPs have already been blocked: $blocked_ips" \
 
                     if [ -n "$cleaned_block_list" ]; then
                         local block_list_file="$BLOCK_LIST_DIR/block-list-$(date +%Y-%m-%d_%H-%M-%S).txt"
-                        skip_auto_consolidation=true
+                        disable_auto_consolidation
                         echo "$cleaned_block_list" >"$block_list_file"
+                        # De-duplicate the block list file
+                        sort "$block_list_file" | uniq > "${block_list_file}.tmp" 
+                        cat "${block_list_file}.tmp" > "$block_list_file" 
+                        cleaned_block_list=$(cat "$block_list_file")
                         log "Block list:"
                         log "$cleaned_block_list"
                         log "Block list saved to file $block_list_file"
                         sleep 0.5
                         consolidate_ips
                         sleep 1
-                        skip_auto_consolidation=false
+                        enable_auto_consolidation
                     else
                         log "Block List request: No valid IPs to block found in API response."
                     fi
@@ -1158,10 +1193,10 @@ update_whitelist_runner() {
             # Delete old block list files
             files_deleted=$(delete_old_block_lists)
             if [ "$files_deleted" = true ]; then
-                skip_auto_consolidation=true
+                disable_auto_consolidation
                 consolidate_ips
                 sleep 1
-                skip_auto_consolidation=false
+                enable_auto_consolidation
             fi
 
         done
@@ -1332,7 +1367,7 @@ log "Block list web server running (PID: $BLOCK_LIST_WEB_SERVER_PID)"
 log "Whitelist file: $WHITELIST_FILE"
 log "Block-list file: $CONSOLIDATED_FILE"
 
-skip_auto_consolidation=false
+enable_auto_consolidation
 
 # Main loop
 while true; do
