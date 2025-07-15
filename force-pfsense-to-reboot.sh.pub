@@ -1,0 +1,73 @@
+#!/bin/sh
+
+# -----------------------------------------------------------------------------
+# Script Name: force-pfsense-to-reboot.sh
+#
+# Description:
+#   This script remotely reboots a pfSense firewall via SSH and optionally
+#   manages the Snort and ntopng services after reboot. It uses `sshpass` to
+#   provide the password for SSH authentication.
+#
+#   - Reboots the pfSense device at the specified IP and port.
+#   - Waits for the device to come back online.
+#   - Depending on the PFSENSE_SHUT_DOWN_SRVS flag:
+#       - If true: Stops Snort and ntopng services.
+#       - If false: Starts Snort and ntopng services.
+#   - Checks and displays the status of Snort and ntopng services.
+#
+# Variables:
+#   PFSENSE_SHUT_DOWN_SRVS   : Set to 'true' to stop services after reboot, 'false' to start them.
+#   PFSENSE_IP               : IP address of the pfSense device.
+#   PFSENSE_PORT             : SSH port for pfSense.
+#   PFSENSE_USER             : SSH username for pfSense.
+#   PFSENSE_PASSWORD         : SSH password for pfSense.
+#   PFSENSE_REBOOT_CMD       : Command to reboot pfSense.
+#   PFSENSE_REBOOT_WAIT      : Wait time in seconds for pfSense to reboot.
+#   PFSENSE_SNORT_STOP_CMD   : Command to stop Snort service.
+#   PFSENSE_NTOPNG_STOP_CMD  : Command to stop ntopng service.
+#   PFSENSE_SNORT_START_CMD  : Command to start Snort service.
+#   PFSENSE_NTOPNG_START_CMD : Command to start ntopng service.
+#   PFSENSE_STATUS_CMD       : Command to check status of Snort and ntopng.
+#
+# Requirements:
+#   - sshpass must be installed on the system running this script.
+#   - SSH access must be enabled on pfSense.
+#
+# Usage:
+#   Edit the variables as needed, then run the script.
+# -----------------------------------------------------------------------------
+
+# Set to true to stop Snort and ntopng services after reboot, false to ensure they are started
+PFSENSE_SHUT_DOWN_SRVS=false
+
+# SSH connection parameters
+PFSENSE_IP="..."
+PFSENSE_PORT="..."
+PFSENSE_USER="..."
+PFSENSE_PASSWORD="..."
+
+# pfSense commands
+PFSENSE_REBOOT_CMD="/sbin/reboot"
+PFSENSE_REBOOT_WAIT=180 # Wait time in seconds for pfSense to reboot
+PFSENSE_SNORT_STOP_CMD="/usr/local/sbin/pfSsh.php playback svc stop snort"
+PFSENSE_NTOPNG_STOP_CMD="/usr/local/sbin/pfSsh.php playback svc stop ntopng"
+PFSENSE_SNORT_START_CMD="/usr/local/sbin/pfSsh.php playback svc start snort"
+PFSENSE_NTOPNG_START_CMD="/usr/local/sbin/pfSsh.php playback svc start ntopng"
+PFSENSE_STATUS_CMD="/usr/local/sbin/pfSsh.php playback svc status snort && /usr/local/sbin/pfSsh.php playback svc status ntopng"
+
+sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_REBOOT_CMD"
+sleep $PFSENSE_REBOOT_WAIT
+
+if [ "$PFSENSE_SHUT_DOWN_SRVS" = true ]; then
+    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_SNORT_STOP_CMD"
+    sleep 4
+    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_NTOPNG_STOP_CMD"
+    sleep 4
+else
+    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_SNORT_START_CMD"
+    sleep 4
+    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_NTOPNG_START_CMD"
+    sleep 4
+fi
+
+sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_STATUS_CMD"

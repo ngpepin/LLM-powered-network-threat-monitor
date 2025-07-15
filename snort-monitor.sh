@@ -168,6 +168,7 @@ last_analysis=""
 last_log_content=""
 last_response=""
 last_update_time=""
+skip_auto_consolidation=false
 
 pfsense_availability_message=""
 
@@ -332,7 +333,7 @@ share_block_list_via_HTTP() {
 save_PDF_report() {
     local threat_level="$1"
     shift
-    local html_content="$*"
+    local html_content="$(decode "$1")"
 
     local cleaned_threat_level=$(echo "$threat_level" | sed 's/[\/\\]//g')
     local PDF_report_file="$REPORTS_DIR/report-$(date +%Y-%m-%d_%H-%M-%S)_$cleaned_threat_level.pdf"
@@ -651,6 +652,59 @@ consolidate_ips() {
     log "Sleeping until next update cycle."
 }
 
+is_blocked() {
+    local ip="$1"
+    if [ -z "$ip" ]; then
+        return 1 # Empty IP is not blocked
+    fi
+    if grep -q -F "$ip" "$CONSOLIDATED_FILE"; then
+        return 0 # IP is blocked
+    else
+        return 1 # IP is not blocked
+    fi
+}
+
+is_whitelisted() {
+    local ip="$1"
+    if [ -z "$ip" ]; then
+        return 1 # Empty IP is not whitelisted
+    fi
+    if grep -q -F "$ip" "$WHITELIST_FILE"; then
+        return 0 # IP is whitelisted
+    else
+        return 1 # IP is not whitelisted
+    fi
+}
+
+flag_unblocked_IPs() {
+    local html="$(decode "$1")"
+
+    # Regex to match IP addresses (IPv4)
+    local ip_regex='([0-9]{1,3}\.){3}[0-9]{1,3}'
+
+    # Find all unique IP addresses in the HTML
+    local ips
+    ips=$(echo "$html" | grep -E -o "$ip_regex" | sort -u)
+
+    # Process each IP
+    while read -r ip; do
+        if is_public_ip "$ip"; then
+            if is_whitelisted "$ip"; then
+                # IP is whitelisted - mark halo emoji (😇)
+                html=$(echo "$html" | sed "s/$ip/\&#x1F607; $ip/g")
+            elif is_blocked "$ip"; then
+                # IP is blocked - add green check emoji (✅)
+                html=$(echo "$html" | sed "s/$ip/\&#x2705; $ip/g")
+            else
+                # IP is public but not blocked and not whitelisted - add police light emoji (🚨)
+                html=$(echo "$html" | sed "s/$ip/\&#x1F6A8; $ip/g")
+            fi
+        fi
+    done <<<"$ips"
+    # Return processed HTML
+    echo "$(encode "$html")"
+}
+
 # Background monitoring function
 start_monitor() {
     log "Starting block list monitor"
@@ -666,7 +720,12 @@ start_monitor() {
                 find "$BLOCK_LIST_DIR" -type f -mtime +"$DELETE_BLOCK_LISTS_AFTER" -delete -print | while read -r deleted_file; do
                     log "Deleted old file: $deleted_file"
                 done
-                consolidate_ips
+                if [ "$skip_auto_consolidation" = false ]; then
+                    log "Consolidating IPs from new file: $file"
+                    consolidate_ips
+                else
+                    log "Skipping auto consolidation due to skip_auto_consolidation flag"
+                fi
             fi
         done
 }
@@ -697,6 +756,9 @@ cleanup() {
     if [ -n "$PFSENSE_THERMALS_MONITOR_PID" ]; then
         kill "$PFSENSE_THERMALS_MONITOR_PID" 2>/dev/null
     fi
+    if [ -n "$PFSENSE_RESTART_PID" ]; then
+        kill "$PFSENSE_RESTART_PID" 2>/dev/null
+    fi
     sleep 2
 
     # Check if the processes are still running
@@ -724,6 +786,12 @@ cleanup() {
         if ps -p "$PFSENSE_THERMALS_MONITOR_PID" >/dev/null; then
             log "pfSense thermal monitor is still running, stopping it..."
             kill -9 "$PFSENSE_THERMALS_MONITOR_PID"
+        fi
+    fi
+    if [ -n "$PFSENSE_RESTART_PID" ]; then
+        if ps -p "$PFSENSE_RESTART_PID" >/dev/null; then
+            log "pfSense restart daemon is still running, stopping it..."
+            kill -9 "$PFSENSE_RESTART_PID"
         fi
     fi
     sleep 2
@@ -783,6 +851,8 @@ update_analysis() {
 
     local analysis=""
     local cleaned_analysis=""
+    local enc_cleaned_analysis=""
+    local enc_flagged_analysis=""
     local cleaned_response=""
     local response_no_extra_spaces=""
     local error=""
@@ -876,6 +946,7 @@ update_analysis() {
             else
                 analysis=$(echo "$response" | jq -r '.choices[0].message.content')
                 cleaned_analysis=$(remove_backticks "$analysis" | sed 's/^html//')
+                log "Cleaned analysis: $cleaned_analysis"
                 cleaned_response=$(echo "$response" | sed 's/  \+/ /g' | tr '\n' ' ' | escape_html)
                 log "Analysis request: API call SUCCEEDED, received valid response $cleaned_response."
             fi
@@ -912,24 +983,20 @@ update_analysis() {
     # Create the webpage
     # create_webpage "$should_update" "$(encode $expires_in)" "$(encode $cleaned_analysis)" "$(encode $escaped_snort_log_lines)" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
 
-    create_webpage "$should_update" "$(encode $expires_in)" "$(encode $cleaned_analysis)" "$(encode $log_lines)" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
-
     if [ "$should_update" = "true" ]; then
         # Save the report as a PDF
-        save_PDF_report "$highest_threat_level" "$cleaned_analysis" &
 
         # Create a list of IPs to block
         # if [[ "$highest_threat_level" == "HIGH" ]] || [[ "$initial_consolidation" == "true" ]]; then
-        (
-            request_json=$(
-                jq -n \
-                    --arg model "$MODEL" \
-                    --arg system_content "$BLOCKLIST_PROMPT_TEXT" \
-                    --arg user_content "SUPPORTING MATERIALS:
+        request_json=$(
+            jq -n \
+                --arg model "$MODEL" \
+                --arg system_content "$BLOCKLIST_PROMPT_TEXT" \
+                --arg user_content "SUPPORTING MATERIALS:
 Here is a recent threat analysis: $(echo $cleaned_analysis | tr -s ' ') \n
 Here are some recent Snort and ntopng logs: $json_log_content \n
 The following IPs have already been blocked: $blocked_ips" \
-                    '{
+                '{
                  model: $model,
                  messages: [
                    {role: "system", content: $system_content},
@@ -938,45 +1005,64 @@ The following IPs have already been blocked: $blocked_ips" \
                  temperature: 0.1,
                  max_tokens: 120000
                }'
-            )
+        )
 
-            printf "Last request JSON for blocked IPs:\n%s\n" "$request_json" >"$SCRIPT_DIR/last_IPs_to_block_request.log"
+        printf "Last request JSON for blocked IPs:\n%s\n" "$request_json" >"$SCRIPT_DIR/last_IPs_to_block_request.log"
 
-            response=$(curl -s -X POST "$API_ENDPOINT" \
-                -H "Content-Type: application/json" \
-                -H "Authorization: Bearer $API_KEY" \
-                -d "$request_json")
+        response=$(curl -s -X POST "$API_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_KEY" \
+            -d "$request_json")
 
-            response_no_extra_spaces=$(echo "$response" | tr -s ' ')
-            printf "Last response JSON for blocked IPs:\n%s\n" "$response_no_extra_spaces" >"$SCRIPT_DIR/last_IPs_to_block_response.log"
+        response_no_extra_spaces=$(echo "$response" | tr -s ' ')
+        printf "Last response JSON for blocked IPs:\n%s\n" "$response_no_extra_spaces" >"$SCRIPT_DIR/last_IPs_to_block_response.log"
 
-            if [ $? -eq 0 ]; then
-                if [[ "$response" == *"error"* ]]; then
-                    log "Block List request API Error: $(echo "$response" | jq -r '.error.message')"
-                else
-                    local block_list=$(echo "$response" | jq -r '.choices[0].message.content' | sed 's/  \+/ /g')
+        if [ $? -eq 0 ]; then
+            if [[ "$response" == *"error"* ]]; then
+                log "Block List request API Error: $(echo "$response" | jq -r '.error.message')"
+            else
+                local block_list=$(echo "$response" | jq -r '.choices[0].message.content' | sed 's/  \+/ /g')
 
-                    if [ -n "$block_list" ]; then
+                if [ -n "$block_list" ]; then
 
-                        local ip_trimmed=""
-                        local cleaned_block_list=$(echo "$block_list" | while read -r ip; do
-                            ip_trimmed=$(echo "$ip" | xargs)
-                            [[ -z "$ip_trimmed" ]] && continue
-                            is_public_ip "$ip_trimmed" && echo "$ip_trimmed"
-                        done)
+                    local ip_trimmed=""
+                    local cleaned_block_list=$(echo "$block_list" | while read -r ip; do
+                        ip_trimmed=$(echo "$ip" | xargs)
+                        [[ -z "$ip_trimmed" ]] && continue
+                        is_public_ip "$ip_trimmed" && echo "$ip_trimmed"
+                    done)
 
+                    if [ -n "$cleaned_block_list" ]; then
                         local block_list_file="$BLOCK_LIST_DIR/block-list-$(date +%Y-%m-%d_%H-%M-%S).txt"
+                        skip_auto_consolidation=true
                         echo "$cleaned_block_list" >"$block_list_file"
                         log "Block list:"
                         log "$cleaned_block_list"
                         log "Block list saved to file $block_list_file"
+                        sleep 0.5
+                        consolidate_ips
+                        sleep 1
+                        skip_auto_consolidation=false
+                    else
+                        log "Block List request: No valid IPs to block found in API response."
                     fi
+
                 fi
-            else
-                log "Block List request: Failed to connect to API. Exit code: $?"
             fi
-        ) &
+        else
+            log "Block List request: Failed to connect to API. Exit code: $?"
+        fi
+
         # fi
+    fi
+
+    if [ -n "$cleaned_analysis" ]; then
+        enc_cleaned_analysis="$(encode "$cleaned_analysis")"
+        enc_flagged_analysis="$(flag_unblocked_IPs "$enc_cleaned_analysis")"
+        # cleaned_analysis=$(decode "$cleaned_analysis")
+
+        save_PDF_report "$highest_threat_level" "$enc_flagged_analysis" &
+        create_webpage "$should_update" "$(encode $expires_in)" "$enc_flagged_analysis" "$(encode $log_lines)" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
     fi
 }
 
@@ -1072,12 +1158,46 @@ update_whitelist_runner() {
             # Delete old block list files
             files_deleted=$(delete_old_block_lists)
             if [ "$files_deleted" = true ]; then
+                skip_auto_consolidation=true
                 consolidate_ips
+                sleep 1
+                skip_auto_consolidation=false
             fi
 
         done
     fi
 
+}
+
+# restart_pfsense_periodically
+# Periodically restarts pfSense at a specified hour each day.
+#
+# Arguments:
+#   $1 - The hour (in HH:MM format) at which to run the pfSense reboot script daily.
+#
+# Behavior:
+#   - Calculates the time until the next scheduled run based on the provided hour.
+#   - Sleeps until the scheduled time.
+#   - Executes the pfSense reboot script located at $SCRIPT_DIR/force-pfsense-to-reboot.sh.
+#   - Logs the output of the reboot script.
+#   - Repeats this process indefinitely.
+restart_pfsense_periodically() {
+    local run_hour="$1"
+
+    local script_output=""
+    while true; do
+        # Calculate now and next AUTO_UPDATE_HOUR
+        now=$(date +%s)
+        target=$(date -d "today $run_hour" +%s)
+        if ((now >= target)); then
+            target=$(date -d "tomorrow $run_hour" +%s)
+        fi
+        sleep $((target - now))
+
+        echo "Running pfSense reboot script: $SCRIPT_DIR/force-pfsense-to-reboot.sh"
+        script_output="$($SCRIPT_DIR/force-pfsense-to-reboot.sh)"
+        log "$script_output"
+    done
 }
 
 log_pfsense_thermals() {
@@ -1092,11 +1212,11 @@ log_pfsense_thermals() {
             log "Error: pfSense Thermal status is not a valid integer: $thermal_status"
         else
             if ! [[ "$load_status" =~ ^-?[0-9]+$ ]]; then
-                log "Error: pfSense Load status is not a valid integer: $load_status"
+                log "Error: pfSense CPU load status is not a valid integer: $load_status"
             else
                 # Log the thermal status with timestamp
                 log "pfSense thermal status: $thermal_status"
-                log "pfSense load status: $load_status"
+                log "pfSense CPU load status: $load_status"
                 touch "$PFSENSE_THERMALS_LOG"
                 echo "$(date '+%Y-%m-%d %H:%M:%S') - $thermal_status, $load_status" >>"$PFSENSE_THERMALS_LOG"
             fi
@@ -1162,6 +1282,7 @@ fi
 create_webpage "false" "$(encode $WEBPAGE_EXPIRATION_GRACE)" "$(encode "Waiting for the first log analysis... $pfsense_availability_message")" "$(encode "Waiting for the first log analysis... $pfsense_availability_message")" "" "" ""
 
 # Initial block list consolidation
+
 first_time=true
 delete_old_block_lists
 consolidate_ips
@@ -1180,6 +1301,7 @@ log "Starting block list web server on port $BLOCK_LIST_WEB_PORT"
 share_block_list_via_HTTP &
 BLOCK_LIST_WEB_SERVER_PID=$!
 
+# Start the pfSense thermal status monitor if enabled
 if [ "$MONITOR_PFSENSE_THERMALS" = true ]; then
     log "Starting pfSense thermal status monitor"
     log_pfsense_thermals &
@@ -1187,6 +1309,16 @@ if [ "$MONITOR_PFSENSE_THERMALS" = true ]; then
 else
     log "pfSense thermal status monitoring is disabled."
     PFSENSE_THERMALS_MONITOR_PID=""
+fi
+
+# Start the periodic pfSense restart daemon if configured
+if [ "$PFSENSE_RESTART" ]; then
+    restart_pfsense_periodically $PFSENSE_RESTART_HOUR &
+    PFSENSE_RESTART_PID=$!
+    log "pfSense periodic restart daemon PID: $PFSENSE_RESTART_PID"
+else
+    log "pfSense will not be restarted periodically."
+    PFSENSE_RESTART_PID=""
 fi
 
 # Trap script exit to kill all background processes
@@ -1199,6 +1331,8 @@ log "Whitelist updater #2 ($AUTO_UPDATE_HOUR_2) running (PID: $WHITELIST_UPDATER
 log "Block list web server running (PID: $BLOCK_LIST_WEB_SERVER_PID)"
 log "Whitelist file: $WHITELIST_FILE"
 log "Block-list file: $CONSOLIDATED_FILE"
+
+skip_auto_consolidation=false
 
 # Main loop
 while true; do

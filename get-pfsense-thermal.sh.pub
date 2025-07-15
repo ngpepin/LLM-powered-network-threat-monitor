@@ -29,6 +29,8 @@ if [ "$GET_LOAD" = true ]; then
     load_value=$(((load_value_usage * 85 + load_value_load * 15) / 100))
 fi
 
+sleep 1
+
 # Get the thermal value from pfSense
 PFSENSE_CMD="sysctl -a | grep therm | head -n 2 | tail -n 1"
 output=$(sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_CMD")
