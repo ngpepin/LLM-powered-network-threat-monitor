@@ -218,13 +218,13 @@ else
   elif [[ $blacklist_removed_line_count -lt $delta_line_count ]]; then
     net_count=$((delta_line_count - blacklist_removed_line_count))
     sep_dashes # ----------------
-    echo "The same list but with $net_count IP(s) from the blacklist file ($BLACKLIST_FILE) removed (count=$blacklist_removed_line_count):"
+    echo "After removing net $net_count IP(s) from the blacklist file, $blacklist_removed_line_count IP(s) remain:"
     cat "$blacklist_removed_tmp_file"
   else
     echo "The list excludes IPs from the blacklist file ($BLACKLIST_FILE)."
   fi
-  echo "Blacklist follows:"
-  cat "$BLACKLIST_FILE"
+  # echo "Blacklist follows:"
+  # cat "$BLACKLIST_FILE"
 
   # STEP 3: Run the ABUSEIPDB bulk IP check on the remaining IPs
   sep_dashes # ----------------
@@ -254,13 +254,13 @@ else
       xsv sort -s 'Domain' |
       xsv table | csvlook 2>/dev/null)"
     echo ""
-    echo "The same table sorted first by Domain follows:"
+    echo "The same table sorted by Domain follows:"
     printf '%s\n%s\n%s\n' "$dashes" "$alpha_whole_table" "$dashes"
     IP_table="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
       xsv sort -N -s 'IP Address' |
       xsv table | csvlook 2>/dev/null)"
     echo ""
-    echo "The same table sorted by IP follows:"
+    echo "The same table sorted by IP(s) follows:"
     printf '%s\n%s\n%s\n' "$dashes" "$IP_table" "$dashes"
     # only_IPs="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
     #   xsv sort -N -s 'IP Address' |
@@ -280,7 +280,7 @@ else
       xsv sort -N -s '% Confidence of Abuse','Total Reports within  days' |
       xsv search -s '% Confidence of Abuse' "$conf_filter_regex" |
       xsv search -s 'Total Reports within  days' "$conf_reports_regex" | xsv select 'IP Address' | sed '/^$/d' | tail -n +2)"
-    echo "Matching IPs, if any, follow:"
+    echo "Matching IP(s), if any, follow:"
     printf '%s\n' "$filtered_ips" | sed 's/^/  /'
     FILTERED_IP_line_count=$(echo "$filtered_ips" | sed '/^$/d' | wc -l)
 
