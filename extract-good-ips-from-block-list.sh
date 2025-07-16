@@ -260,7 +260,7 @@ else
       xsv sort -N -s 'IP Address' |
       xsv table | csvlook 2>/dev/null)"
     echo ""
-    echo "The same table sorted by IP(s) follows:"
+    echo "The same table sorted by IP address follows:"
     printf '%s\n%s\n%s\n' "$dashes" "$IP_table" "$dashes"
     # only_IPs="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
     #   xsv sort -N -s 'IP Address' |

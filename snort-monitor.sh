@@ -82,6 +82,7 @@ AUTO_UPDATE_WHITELIST_BOOL=false # Whether to automatically update the whitelist
 AUTO_UPDATE_HOUR_1="02:00"       # Time of day to update the whitelist #1 (24-hour format, e.g., "14:30" for 2:30 PM)
 AUTO_UPDATE_HOUR_2="14:00"       # Time of day to update the whitelist #2 (24-hour format, e.g., "14:30" for 2:30 PM)
 LOCAL_USER_AND_GROUP=""          # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
+DELETE_BLOCK_LISTS_AFTER=28      # Number of days to keep the block list files before deleting them
 
 # Override this default prompt text in snort-monitor.conf if you wish:
 read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
@@ -156,7 +157,7 @@ WEBPAGE_EXPIRATION_GRACE=10   # Grace period for webpage expiration allowing LLM
 WEB_PORT=9999               # Port for the Analysis web server
 LOG_LINES_TO_SHOW=120       # Number of log lines to provide to the LLM and show on the webpage
 BLOCK_LIST_WEB_PORT=9998    # Port for the Block List web server
-DELETE_BLOCK_LISTS_AFTER=14 # Number of days to keep the block list files before deleting them
+
 
 # Execute custom initialization code if exists
 if [[ -f "$SCRIPT_DIR/custom-init.sh" ]]; then
