@@ -91,21 +91,21 @@ fi
 #   - Removes surrounding double quotes from the confidence and reports fields.
 #   - Prints the IP address (first column) if both confidence and reports are
 #     less than or equal to their respective thresholds.
-filter_ips() {
-  local csv_content="$1"
-  printf '%s\n' "$csv_content" | awk -F',' -v conf="$CONFIDENCE_THRESHOLD" -v rep="$REPORTS_THRESHOLD" '
-    NR == 1 { next }  # Skip header row
-    # Skip rows where the 2nd field contains ERROR (rate limit messages)
-    $2 ~ /ERROR:/ { next }
-    {
-      gsub(/^"|"$/, "", $2)
-      gsub(/^"|"$/, "", $3)
-      if (($2+0) <= conf && ($3+0) <= rep) {
-        print $1
-      }
-    }
-  '
-}
+# filter_ips() {
+#   local csv_content="$1"
+#   printf '%s\n' "$csv_content" | awk -F',' -v conf="$CONFIDENCE_THRESHOLD" -v rep="$REPORTS_THRESHOLD" '
+#     NR == 1 { next }  # Skip header row
+#     # Skip rows where the 2nd field contains ERROR (rate limit messages)
+#     $2 ~ /ERROR:/ { next }
+#     {
+#       gsub(/^"|"$/, "", $2)
+#       gsub(/^"|"$/, "", $3)
+#       if (($2+0) <= conf && ($3+0) <= rep) {
+#         print $1
+#       }
+#     }
+#   '
+# }
 
 sep_dashes() {
   printf '%*s\n' "$separator_characters" '' | tr ' ' '-'
@@ -259,30 +259,39 @@ else
     IP_table="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
       xsv sort -N -s 'IP Address' |
       xsv table | csvlook 2>/dev/null)"
-      echo ""
+    echo ""
     echo "The same table sorted by IP follows:"
     printf '%s\n%s\n%s\n' "$dashes" "$IP_table" "$dashes"
-    # OR, if xsv/csvlook not available, use cat "$ABUSEIPDB_assessment" | perl -pe 's/((?<=,)|(?<=^)),/ ,/g;' | column -t -s,
-    # OR use printf '%s\n' "$ABUSEIPDB_assessment for vanilla output
+    # only_IPs="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
+    #   xsv sort -N -s 'IP Address' |
+    #   xsv select 'IP Address' | sed '/^$/d' | tail -n +2)"
+    # echo "DEBUG: List of just the IPs from the ABUSEIPDB assessment:"
+    # printf '%s\n' "$only_IPs"
 
     # STEP 4: Filter the IPs based on the ABUSEIPDB assessment and thresholds
     sep_dashes # ----------------
     echo "Filtering IPs based on ABUSEIPDB assessment and thresholds of maximum ${CONFIDENCE_THRESHOLD}% confidence of abuse and a maximum of $REPORTS_THRESHOLD discrete reports of abuse..."
 
-    ABUSEIPDB_assessment="$(cat "$csv_file")"
-    filtered_ips="$(filter_ips "$ABUSEIPDB_assessment")"
+    # ABUSEIPDB_assessment="$(cat "$csv_file")"
+    # filtered_ips="$(filter_ips "$ABUSEIPDB_assessment")"
+    conf_filter_regex=$(generate_integer_range_regex 0 $CONFIDENCE_THRESHOLD)
+    conf_reports_regex=$(generate_integer_range_regex 0 $REPORTS_THRESHOLD)
+    filtered_ips="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
+      xsv sort -N -s '% Confidence of Abuse','Total Reports within  days' |
+      xsv search -s '% Confidence of Abuse' "$conf_filter_regex" |
+      xsv search -s 'Total Reports within  days' "$conf_reports_regex" | xsv select 'IP Address' | sed '/^$/d' | tail -n +2)"
+    echo "Matching IPs, if any, follow:"
+    printf '%s\n' "$filtered_ips" | sed 's/^/  /'
     FILTERED_IP_line_count=$(echo "$filtered_ips" | sed '/^$/d' | wc -l)
 
     if [[ $FILTERED_IP_line_count -eq 0 ]]; then
-      echo "> no IPs were found that match those criteria. Exiting."
+      echo "*** No IPs were found that match those criteria. Exiting."
       sep_double # ================
       exit 0
     else
       # STEP 5: Add the filtered IPs to the whitelist file, backing it up first
 
-      # Use xsv and csvlook to filter the CSV content and output in a nice format
-      conf_filter_regex=$(generate_integer_range_regex 0 $CONFIDENCE_THRESHOLD)
-      conf_reports_regex=$(generate_integer_range_regex 0 $REPORTS_THRESHOLD)
+      # Use xsv and csvlook to output in a nice format
       filtered_table="$(xsv select 'IP Address','Domain','% Confidence of Abuse','Total Reports within  days' "$csv_file" |
         xsv sort -N -s '% Confidence of Abuse','Total Reports within  days' |
         xsv search -s '% Confidence of Abuse' "$conf_filter_regex" |

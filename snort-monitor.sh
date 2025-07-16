@@ -893,6 +893,8 @@ update_analysis() {
     local log_lines=""
     local log_lines_snort=""
     local log_lines_ntopng=""
+    local enc_log_lines=""
+    local enc_flagged_log_lines=""
     local request_json=""
     local response=""
     local time_now=$(date '+%Y-%m-%d %H:%M:%S')
@@ -1025,8 +1027,8 @@ update_analysis() {
                 --arg system_content "$BLOCKLIST_PROMPT_TEXT" \
                 --arg user_content "SUPPORTING MATERIALS:
 Here is a recent threat analysis: $(echo $cleaned_analysis | tr -s ' ') \n
-Here are some recent Snort and ntopng logs: $json_log_content \n
-The following IPs have already been blocked: $blocked_ips" \
+Here are some recent Snort and ntopng logs. Please extract and provide in your response all external IPs that are listed in lines containing [Blacklisted Client Contact]: $json_log_content \n
+The following IPs have already been blocked so you do not need to include them in your response: $blocked_ips" \
                 '{
                  model: $model,
                  messages: [
@@ -1095,9 +1097,11 @@ The following IPs have already been blocked: $blocked_ips" \
         enc_cleaned_analysis="$(encode "$cleaned_analysis")"
         enc_flagged_analysis="$(flag_unblocked_IPs "$enc_cleaned_analysis")"
         # cleaned_analysis=$(decode "$cleaned_analysis")
+        enc_log_lines="$(encode "$log_lines")"
+        enc_flagged_log_lines="$(flag_unblocked_IPs "$enc_log_lines")"
 
         save_PDF_report "$highest_threat_level" "$enc_flagged_analysis" &
-        create_webpage "$should_update" "$(encode $expires_in)" "$enc_flagged_analysis" "$(encode $log_lines)" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
+        create_webpage "$should_update" "$(encode $expires_in)" "$enc_flagged_analysis" "$enc_flagged_log_lines" "$(encode $cleaned_response)" "$(encode $error)" "$(encode $snort_log_updated_time)"
     fi
 }
 
