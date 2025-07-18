@@ -154,10 +154,9 @@ INTERVAL_PERTURBATION_MAX=1.4 # Maximum perturbation coefficient for interval
 WEBPAGE_EXPIRATION_GRACE=10   # Grace period for webpage expiration allowing LLM API query/ies to take place (in seconds)
 
 # Web server configuration
-WEB_PORT=9999               # Port for the Analysis web server
-LOG_LINES_TO_SHOW=120       # Number of log lines to provide to the LLM and show on the webpage
-BLOCK_LIST_WEB_PORT=9998    # Port for the Block List web server
-
+WEB_PORT=9999            # Port for the Analysis web server
+LOG_LINES_TO_SHOW=120    # Number of log lines to provide to the LLM and show on the webpage
+BLOCK_LIST_WEB_PORT=9998 # Port for the Block List web server
 
 # Execute custom initialization code if exists
 if [[ -f "$SCRIPT_DIR/custom-init.sh" ]]; then
@@ -503,9 +502,10 @@ create_webpage() {
             background-color: #f5f5f5;
         }
         .log-content, .response-content {
-            height: 200px;
+            height: 1200px;
             overflow-y: scroll;
-            font-family: monospace;
+            font-family: "Arial Narrow", Arial, sans-serif;
+            font-size: 12pt;
             white-space: pre-wrap;
             padding: 5px;
             background-color: #fff;
@@ -530,14 +530,15 @@ create_webpage() {
         <div class="log-content">$log_content</div>
     </div>
 
-    <div class="section-title">Last Successful API Response:</div>
-    <div class="response-container">
-        <div class="response-content">$api_response</div>
-    </div>
 </body>
 </html>
 EOF
 }
+
+# <div class="section-title">Last Successful API Response:</div>
+# <div class="response-container">
+#     <div class="response-content">$api_response</div>
+# </div>
 
 # -----------------------------------------------------------------------------
 # Function: is_public_ip
@@ -723,8 +724,8 @@ flag_unblocked_IPs() {
                 # IP is whitelisted - mark halo emoji (😇)
                 html=$(echo "$html" | sed "s/$ip/\&#x1F607; $ip/g")
             elif is_blocked "$ip"; then
-                # IP is blocked - add green check emoji (✅)
-                html=$(echo "$html" | sed "s/$ip/\&#x2705; $ip/g")
+                # IP is blocked - add no entry emoji (🚫)
+                html=$(echo "$html" | sed "s/$ip/\&#x1F6AB; $ip/g")
             else
                 # IP is public but not blocked and not whitelisted - add police light emoji (🚨)
                 html=$(echo "$html" | sed "s/$ip/\&#x1F6A8; $ip/g")
@@ -888,7 +889,6 @@ update_analysis() {
     local cleaned_response=""
     local response_no_extra_spaces=""
     local error=""
-    local escaped_snort_log_lines=""
     local json_last_analysis=""
     local json_log_content=""
     local log_lines=""
@@ -921,18 +921,25 @@ update_analysis() {
         log_lines_ntopng=$(cat "$temp_ntopng_out_file")
         rm -f "$temp_ntopng_in_file" "$temp_ntopng_out_file"
 
-        log_lines=$(
-            printf "Snort logs:\n"
+        log_lines="$(
+            printf %b "---------------------------------------------------------------------\n\t\t START OF SNORT LOGS \n---------------------------------------------------------------------\n"
             echo "$log_lines_snort"
-            printf "ntopng logs:\n"
-            echo "$log_lines_ntopng"
-        )
-        escaped_snort_log_lines=$(echo "$log_lines_snort" | escape_html)
-        json_log_content=$(echo "$log_lines" | escape_json | tr -s ' ')
+            printf %b "---------------------------------------------------------------------\n\t\t END OF SNORT LOGS \n---------------------------------------------------------------------\n"
+            printf %b "---------------------------------------------------------------------\n\t\t START OF NTOPNG LOGS \n---------------------------------------------------------------------\n"
+            echo "$log_lines_ntopng"  
+            printf %b "---------------------------------------------------------------------\n\t\t END OF NTOPNG LOGS \n---------------------------------------------------------------------\n"
+        )"
+        json_log_content=$(echo $log_lines | escape_json | tr -s ' ')
         json_last_analysis=""
+        last_analysis=$(echo "$last_analysis" | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         if [ -n "$last_analysis" ]; then
-            json_last_analysis="\nThis is the last analysis you provided.  Please review it and use it as a guide for identifying patterns and making prioritizations and formating consistent over time:\n"
+            json_last_analysis="--------------------------------------------------------------------- LAST ANALYSIS: ---------------------------------------------------------------------"
+            json_last_analysis+="This is the last analysis you provided.  Please review it and use it as a guide for identifying patterns and making prioritizations and formating consistent over time: "
             json_last_analysis+=$(echo "$last_analysis" | escape_json)
+        fi
+
+        if [ -n "$blocked_ips" ]; then
+            blocked_ips="--------------------------------------------------------------------- ALREADY BLOCKED IPs: --------------------------------------------------------------------- $blocked_ips"
         fi
 
         # Prepare the API request
@@ -941,9 +948,8 @@ update_analysis() {
             --arg model "$MODEL" \
             --arg system_content "$ANALYSIS_PROMPT_TEXT" \
             --arg user_content "$json_log_content.  
-            \nSUPPORTING MATERIALS:
-            $json_last_analysis. 
-            The following IPs have already been blocked: $blocked_ips." \
+            $json_last_analysis 
+            $blocked_ips" \
             '{
             model: $model,
             messages: [
@@ -1071,8 +1077,8 @@ The following IPs have already been blocked so you do not need to include them i
                         disable_auto_consolidation
                         echo "$cleaned_block_list" >"$block_list_file"
                         # De-duplicate the block list file
-                        sort "$block_list_file" | uniq > "${block_list_file}.tmp" 
-                        cat "${block_list_file}.tmp" > "$block_list_file" 
+                        sort "$block_list_file" | uniq >"${block_list_file}.tmp"
+                        cat "${block_list_file}.tmp" >"$block_list_file"
                         cleaned_block_list=$(cat "$block_list_file")
                         log "Block list:"
                         log "$cleaned_block_list"
