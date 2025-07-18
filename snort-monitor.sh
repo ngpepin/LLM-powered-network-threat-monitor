@@ -902,13 +902,13 @@ update_analysis() {
     local normalized_html=""
     local highest_threat_level="N/A"
     local blocked_ips=$(paste -sd, "$CONSOLIDATED_FILE")
-
+    local ntopng_logs_lines_to_show=0
     local should_update="true"
+
     if [ "$snort_log_updated_time" -le "$last_check" ]; then
         log "No updates to Snort log since last check"
         should_update="false"
     else
-
         # Get snort log content
         log_lines_snort=$(tail -n "$LOG_LINES_TO_SHOW" "$SNORT_LOG")
 
@@ -916,7 +916,10 @@ update_analysis() {
         local temp_ntopng_in_file=$(mktemp)
         local temp_ntopng_out_file=$(mktemp)
         touch "$temp_ntopng_out_file"
-        tail -n "$LOG_LINES_TO_SHOW" "$NTOPNG_LOG" >"$temp_ntopng_in_file"
+
+        # get 2x more lines from ntopng log to ensure we have enough data
+        ntopng_logs_lines_to_show=$((LOG_LINES_TO_SHOW * 2))
+        tail -n "$ntopng_logs_lines_to_show" "$NTOPNG_LOG" >"$temp_ntopng_in_file"
         $SCRIPT_DIR/resolve-ntopng-log.sh "$temp_ntopng_in_file" "$temp_ntopng_out_file"
         log_lines_ntopng=$(cat "$temp_ntopng_out_file")
         rm -f "$temp_ntopng_in_file" "$temp_ntopng_out_file"
@@ -926,7 +929,7 @@ update_analysis() {
             echo "$log_lines_snort"
             printf %b "---------------------------------------------------\n\t END OF SNORT LOGS \n---------------------------------------------------\n"
             printf %b "---------------------------------------------------\n\t START OF NTOPNG LOGS \n---------------------------------------------------\n"
-            echo "$log_lines_ntopng"  
+            echo "$log_lines_ntopng"
             printf %b "---------------------------------------------------\n\t END OF NTOPNG LOGS \n---------------------------------------------------\n"
         )"
         json_log_content=$(echo $log_lines | escape_json | tr -s ' ')
