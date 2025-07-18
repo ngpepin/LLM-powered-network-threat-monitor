@@ -922,24 +922,24 @@ update_analysis() {
         rm -f "$temp_ntopng_in_file" "$temp_ntopng_out_file"
 
         log_lines="$(
-            printf %b "---------------------------------------------------------------------\n\t\t START OF SNORT LOGS \n---------------------------------------------------------------------\n"
+            printf %b "---------------------------------------------------\n\t START OF SNORT LOGS \n---------------------------------------------------\n"
             echo "$log_lines_snort"
-            printf %b "---------------------------------------------------------------------\n\t\t END OF SNORT LOGS \n---------------------------------------------------------------------\n"
-            printf %b "---------------------------------------------------------------------\n\t\t START OF NTOPNG LOGS \n---------------------------------------------------------------------\n"
+            printf %b "---------------------------------------------------\n\t END OF SNORT LOGS \n---------------------------------------------------\n"
+            printf %b "---------------------------------------------------\n\t START OF NTOPNG LOGS \n---------------------------------------------------\n"
             echo "$log_lines_ntopng"  
-            printf %b "---------------------------------------------------------------------\n\t\t END OF NTOPNG LOGS \n---------------------------------------------------------------------\n"
+            printf %b "---------------------------------------------------\n\t END OF NTOPNG LOGS \n---------------------------------------------------\n"
         )"
         json_log_content=$(echo $log_lines | escape_json | tr -s ' ')
         json_last_analysis=""
         last_analysis=$(echo "$last_analysis" | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         if [ -n "$last_analysis" ]; then
-            json_last_analysis="--------------------------------------------------------------------- LAST ANALYSIS: ---------------------------------------------------------------------"
+            json_last_analysis="--------------------------------------------------- LAST ANALYSIS: ---------------------------------------------------"
             json_last_analysis+="This is the last analysis you provided.  Please review it and use it as a guide for identifying patterns and making prioritizations and formating consistent over time: "
             json_last_analysis+=$(echo "$last_analysis" | escape_json)
         fi
 
         if [ -n "$blocked_ips" ]; then
-            blocked_ips="--------------------------------------------------------------------- ALREADY BLOCKED IPs: --------------------------------------------------------------------- $blocked_ips"
+            blocked_ips="--------------------------------------------------- ALREADY BLOCKED IPs: --------------------------------------------------- $blocked_ips"
         fi
 
         # Prepare the API request
