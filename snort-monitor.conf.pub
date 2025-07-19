@@ -1,6 +1,6 @@
 # Configuration variables
 
-PFSENSE_FW_IP="999.999.999.999"                                          # IP address of the pfSense firewall
+PFSENSE_FW_IP=" ... "                                                    # IP address of the pfSense firewall
 BLOCK_LIST_DIR="$SCRIPT_DIR/block-lists"                                 # Directory to store block lists in
 CONSOLIDATED_FILE_SHARE="$SCRIPT_DIR/consolidated-block-list"            # Consolidated block list directory (samba share)
 CONSOLIDATED_FILE="$CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt" # Consolidated block list file
@@ -9,24 +9,33 @@ WHITELIST_FILE="$SCRIPT_DIR/ip-whitelist.txt"                            # IP wh
 REPORTS_DIR="$SCRIPT_DIR/reports"                                        # Directory to store PDF reports in
 WEB_DIR="/var/www/snort-monitor"                                         # Directory for web files
 
-UPDATE_INTERVAL=1800                                                     # Interval to check for new Snort and ntopng logs (in seconds)
-AUTO_UPDATE_HOUR_1="02:00"                                               # Time of day to update the whitelist #1 (24-hour format, e.g., "14:30" for 2:30 PM)
-AUTO_UPDATE_HOUR_2="12:00"                                               # Time of day to update the whitelist #2 (24-hour format, e.g., "14:30" for 2:30 PM)AUTO_UPDATE_WHITELIST_BOOL=false                                         # Whether to automatically update the whitelist at the above time
-LOCAL_USER_AND_GROUP="..."                                               # User and group for local file permissions
+# Script parameters
+UPDATE_INTERVAL=2000                 # Interval to check for new Snort and ntopng logs (in seconds)
+AUTO_UPDATE_HOUR_1="02:00"           # Time of day to update the whitelist #1 (24-hour format, e.g., "14:30" for 2:30 PM)
+AUTO_UPDATE_HOUR_2="14:00"           # Time of day to update the whitelist #2 (24-hour format, e.g., "14:30" for 2:30 PM)
+AUTO_UPDATE_WHITELIST_BOOL=true      # Whether to automatically update the whitelist at the above time
+LOCAL_USER_AND_GROUP=" ... "         # User and group for local file permissions
+DELETE_BLOCK_LISTS_AFTER=28          # Number of days to keep the block list files before deleting them
 
 # pfSense-specific parameters
-PFSENSE_DIR="/var/log/pfsense"                                           # Directory where pfSense logs are stored
-LOG_DIR="$PFSENSE_DIR/..."                                               # Directory for pfSense logs
-ALT_LOG_DIR="$PFSENSE_DIR/..."                                           # Alternate directory for pfSense logs
-SNORT_LOG="$LOG_DIR/snort.log"                                           # Snort log file
-NTOPNG_LOG="$ALT_LOG_DIR/ntopng.log"                                     # ntopng log file
-MONITOR_PFSENSE_THERMALS=false                                           # Whether to monitor pfSense thermal sensors
-PFSENSE_THERMALS_LOG="$SCRIPT_DIR/pfsense-thermal.log"                   # Path to the pfSense thermal log file
-PFSENSE_THERMALS_INTERVAL=10                                             # Interval to check pfSense thermal sensor (in seconds)
+INCLUDE_NTOPNG_LOGS=false                              # Whether to include ntopng logs in the analysis
+PFSENSE_DIR="/var/log/pfsense"                         # Directory where pfSense logs are stored
+LOG_DIR="$PFSENSE_DIR/..."                             # Directory for pfSense logs
+ALT_LOG_DIR="$PFSENSE_DIR/..."                         # Alternate directory for pfSense logs
+SNORT_LOG="$LOG_DIR/snort.log"                         # Snort log file
+NTOPNG_LOG="$ALT_LOG_DIR/ntopng.log"                   # ntopng log file
 
-API_ENDPOINT='...' # API endpoint for the AI service
-API_KEY="..."                                                            # OpenAI API key 
-MODEL="gpt-4o"                                                           # Model to use for the AI service (e.g., gpt-4o)
+MONITOR_PFSENSE_THERMALS=false                         # Whether to monitor pfSense thermal sensors
+PFSENSE_THERMALS_LOG="$SCRIPT_DIR/pfsense-thermal.log" # Path to the pfSense thermal log file
+PFSENSE_THERMALS_INTERVAL=10                           # Interval to check pfSense thermal sensor (in seconds) - min is 10 sec
+
+PFSENSE_RESTART=true                                   # Whether to restart pfSense 
+PFSENSE_RESTART_HOUR="05:00"                           # Time of day to restart pfSense 
+
+# LLM (Large Language Model) parameters
+API_ENDPOINT=' ... '                                   # API endpoint for the AI service
+API_KEY=" ... "                                        # OpenAI API key 
+MODEL=" ... "                                          # Model to use for the AI service (e.g., gpt-4o)
 
 # ------------ LOG ANALYSIS PROMPT ------------ #
 read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'

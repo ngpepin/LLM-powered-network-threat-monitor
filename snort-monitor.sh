@@ -69,12 +69,14 @@
 #
 ###############################################################################
 
-# Configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
-SNORT_LOG="<provide SNORT_LOG in .conf file>"   # Path to the snort log file (sourced from snort-monitor.conf
-NTOPNG_LOG="<provide NTOPNG_LOG in .conf file>" # Path to the ntopng log file (sourced from snort-monitor.conf)
-API_ENDPOINT=""                                 # OpenAI API endpoint (sourced from snort-monitor.conf)
-API_KEY=""                                      # OpenAI API key (sourced from snort-monitor.conf)
-MODEL=""                                        # OpenAI model to use (sourced from snort-monitor.conf)
+# Configuration variables THAT MUST BE OVERRIDDEN IN SNORT-MONITOR.CONF
+SNORT_LOG="<provide in .conf file>"  # Path to the snort log file (sourced from snort-monitor.conf
+NTOPNG_LOG="<provide in .conf file>" # Path to the ntopng log file (sourced from snort-monitor.conf)
+
+# LLM (Large Language Model) parameters THAT MUST BE OVERRIDDEN IN SNORT-MONITOR.CONF
+API_ENDPOINT='<provide in .conf file>' # API endpoint for the AI service
+API_KEY="<provide in .conf file>"      # OpenAI API key
+MODEL="<provide in .conf file>"        # Model to use for the AI service (e.g., gpt-4o)
 
 # Default configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
 UPDATE_INTERVAL=99999            # Interval to check for new logs (in seconds)
@@ -84,55 +86,56 @@ AUTO_UPDATE_HOUR_2="14:00"       # Time of day to update the whitelist #2 (24-ho
 LOCAL_USER_AND_GROUP=""          # Ensure output files are accessible to this user, if specified; override in snort-monitor.conf if you wish, e.g. "www-data:www-data"
 DELETE_BLOCK_LISTS_AFTER=28      # Number of days to keep the block list files before deleting them
 
-# Override this default prompt text in snort-monitor.conf if you wish:
+# MUST BE OVERRIDDEN IN SNORT-MONITOR.CONF
+BLOCK_LIST_DIR="<provide in .conf file>"          # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
+CONSOLIDATED_FILE_SHARE="<provide in .conf file>" # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
+CONSOLIDATED_FILE="<provide in .conf file>"       # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
+WHITELIST_FILE="<provide in .conf file>"          # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
+REPORTS_DIR="<provide in .conf file>"             # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
+WEB_DIR="<provide in .conf file>"                 # e.g., /var/www/snort-monitor                               Directory for web files
+
+#------------------------------------------------------------------------------
+
+# pfSense-specific parameters THAT MUST BE OVERRIDDEN IN SNORT-MONITOR.CONF
+INCLUDE_NTOPNG_LOGS=false             # Whether to include ntopng logs in the analysis
+PFSENSE_DIR="<provide in .conf file>" # Directory where pfSense logs are stored
+LOG_DIR="$PFSENSE_DIR/ ... "          # Directory for pfSense logs
+ALT_LOG_DIR="$PFSENSE_DIR/ ... "      # Alternate directory for pfSense logs
+SNORT_LOG="$LOG_DIR/snort.log"        # Snort log file
+NTOPNG_LOG="$ALT_LOG_DIR/ntopng.log"  # ntopng log file
+
+MONITOR_PFSENSE_THERMALS=false                         # Whether to monitor pfSense thermal sensors
+PFSENSE_THERMALS_LOG="$SCRIPT_DIR/pfsense-thermal.log" # Path to the pfSense thermal log file
+PFSENSE_THERMALS_INTERVAL=10                           # Interval to check pfSense thermal sensor (in seconds) - min is 10 sec
+
+PFSENSE_RESTART=true         # Whether to restart pfSense
+PFSENSE_RESTART_HOUR="05:00" # Time of day to restart pfSense
+
+#------------------------------------------------------------------------------
+
+# Prompt text THAT MUST BE OVERRIDDEN IN SNORT-MONITOR.CONF
 read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
-Role: You are an expert cybersecurity analyst.
-Task: Analyze Snort/ntopng logs and provide a structured threat report.
-Output Requirements using these section headings:
-1. HIGHEST THREAT LEVEL REACHED
-   Format: Single word (HIGH/MEDIUM/LOW/N/A) on its own line.
-   Purpose: For automated parsing.
-2. ASSESSMENT
-   Content: A succinct but analytically advanced summary of urgency and bottom-line impact (3-4 sentences).
-3. THREATS
-   Format: Prioritized HTML table with colored cells (High=pale-red, Medium=pale-orange, Low=pale-green).
-   Rules:
-   - Explicitly list all IPs or domain names of concern; don't use 'e.g.' or shortcut phrases like 'and other IPs' as a way of skipping a complete enumeration.
-   Columns: Threat Level, IP(s), Traffic Type, Justification.
-4. TIMELINE
-   Format: HTML table with time intervals (include day/month if not today).
-5. NEXT STEPS
-   Format: HTML bulleted list, priority-ordered (urgent first).
-6. TECHNICAL DISCUSSION
-   Content: Advanced and detailed technical analysis organized using the WASC threat classification and including advisory references.
-   The goal is to educate an advanced reader on the nature of the threats and how they can be mitigated. Provide longer and more detailed description to advance this objective.
-Styling & Compliance:
-   Output Format: HTML only (no Markdown/JSON).
-   Tables: Use pale red/orange/green backgrounds for High/Medium/Low.
-   Consistency: Align threat levels across all sections.
+... <provide in .conf file> ...
 EOF
 
-# Override this default prompt text in snort-monitor.conf if you wish:
+# Prompt text THAT MUST BE OVERRIDDEN IN SNORT-MONITOR.CONF
 read -r -d '' BLOCKLIST_PROMPT_TEXT <<'EOF'
-Role: You are an expert cybersecurity analyst.
-Task: Generate a plain-text block list of external (routable) IP addresses for pfSense pfBlockerNG based on Snort/ntopng logs.
-Requirements:
-1. Scope: Only include external, routable IPs. 
-2. Validation: Research each IP to avoid blocking trusted providers (e.g., Microsoft 365, Gmail).
-3. Format: Plain text, one IP per line. No subnet masks, headers, or explanations.
-4. Output Restrictions: No HTML/Markdown/JSON. Only raw IPs.
-Example Output:
-203.0.113.45
-198.51.100.10
+... <provide in .conf file> ...
 EOF
 
-# Provide these default paths in snort-monitor.conf:
-BLOCK_LIST_DIR="<provide BLOCK_LIST_DIR in .conf file>"                   # e.g., $SCRIPT_DIR/block-lists                               Directory to store block lists in
-CONSOLIDATED_FILE_SHARE="<provide CONSOLIDATED_FILE_SHARE in .conf file>" # e.g., $SCRIPT_DIR/consolidated-block-list                   Consolidated block list directory (samba share)
-CONSOLIDATED_FILE="<provide ONSOLIDATED_FILE in .conf file>"              # e.g., $CONSOLIDATED_FILE_SHARE/consolidated-block-list.txt  Consolidated block list file
-WHITELIST_FILE="<provide WHITELIST_FILE in .conf file>"                   # e.g., $SCRIPT_DIR/ip-whitelist.txt                          IP whitelist file
-REPORTS_DIR="<provide REPORTS_DIR in .conf file>"                         # e.g., $SCRIPT_DIR/reports                                   Directory to store PDF reports in
-WEB_DIR="<provide WEB_DIR in .conf file>"                                 # e.g., /var/www/snort-monitor                               Directory for web files
+#------------------------------------------------------------------------------
+
+# Interval and Pertubation variables
+INTERVAL_PERTURBATION_MIN=0.8 # Minimum perturbation coefficient for interval
+INTERVAL_PERTURBATION_MAX=1.4 # Maximum perturbation coefficient for interval
+WEBPAGE_EXPIRATION_GRACE=10   # Grace period for webpage expiration allowing LLM API query/ies to take place (in seconds)
+
+# Web server configuration
+WEB_PORT=9999            # Port for the Analysis web server
+LOG_LINES_TO_SHOW=120    # Number of log lines to provide to the LLM and show on the webpage
+BLOCK_LIST_WEB_PORT=9998 # Port for the Block List web server
+
+###############################################################################
 
 # Source the configuration file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -145,18 +148,10 @@ else
     echo "Configuration file ${FNAME_CONFIG} not found in $SCRIPT_DIR" >&2
 fi
 
+###############################################################################
+
 TIMESTAMP_FILE="/tmp/last_snort_check.time" # File to store the last check timestamp
 LOG_FILE="/var/log/snort-monitor.log"       # Log file for the script
-
-# Update Interval and Pertubation variables
-INTERVAL_PERTURBATION_MIN=0.8 # Minimum perturbation coefficient for interval
-INTERVAL_PERTURBATION_MAX=1.4 # Maximum perturbation coefficient for interval
-WEBPAGE_EXPIRATION_GRACE=10   # Grace period for webpage expiration allowing LLM API query/ies to take place (in seconds)
-
-# Web server configuration
-WEB_PORT=9999            # Port for the Analysis web server
-LOG_LINES_TO_SHOW=120    # Number of log lines to provide to the LLM and show on the webpage
-BLOCK_LIST_WEB_PORT=9998 # Port for the Block List web server
 
 # Execute custom initialization code if exists
 if [[ -f "$SCRIPT_DIR/custom-init.sh" ]]; then
@@ -169,7 +164,7 @@ last_log_content=""
 last_response=""
 last_update_time=""
 
-# State variable, flag file and get/set functions to control the auto-consolidation of block lists
+# State variables, flag file and get/set functions to control the auto consolidation of block lists
 skip_auto_consolidation=false
 skip_auto_consolidation_flag_file="$(mktemp)"
 disable_auto_consolidation() {
@@ -913,16 +908,20 @@ update_analysis() {
         log_lines_snort=$(tail -n "$LOG_LINES_TO_SHOW" "$SNORT_LOG")
 
         # resolve ntopng log lines with DNS addresses to IPs (not necessary if ntopng configured to not lookup numerical IPs)
-        local temp_ntopng_in_file=$(mktemp)
-        local temp_ntopng_out_file=$(mktemp)
-        touch "$temp_ntopng_out_file"
 
-        # get 2x more lines from ntopng log to ensure we have enough data
-        ntopng_logs_lines_to_show=$((LOG_LINES_TO_SHOW * 2))
-        tail -n "$ntopng_logs_lines_to_show" "$NTOPNG_LOG" >"$temp_ntopng_in_file"
-        $SCRIPT_DIR/resolve-ntopng-log.sh "$temp_ntopng_in_file" "$temp_ntopng_out_file"
-        log_lines_ntopng=$(cat "$temp_ntopng_out_file")
-        rm -f "$temp_ntopng_in_file" "$temp_ntopng_out_file"
+        if [ "$INCLUDE_NTOPNG_LOGS" = true ]; then
+            local temp_ntopng_in_file=$(mktemp)
+            local temp_ntopng_out_file=$(mktemp)
+            touch "$temp_ntopng_out_file"
+            # get 2x more lines from ntopng log to ensure we have enough data
+            ntopng_logs_lines_to_show=$((LOG_LINES_TO_SHOW * 2))
+            tail -n "$ntopng_logs_lines_to_show" "$NTOPNG_LOG" >"$temp_ntopng_in_file"
+            $SCRIPT_DIR/resolve-ntopng-log.sh "$temp_ntopng_in_file" "$temp_ntopng_out_file"
+            log_lines_ntopng=$(cat "$temp_ntopng_out_file")
+            rm -f "$temp_ntopng_in_file" "$temp_ntopng_out_file"
+        else
+            log_lines_ntopng="ntopng logs not available."
+        fi
 
         log_lines="$(
             printf %b "---------------------------------------------------\n\t START OF SNORT LOGS \n---------------------------------------------------\n"
