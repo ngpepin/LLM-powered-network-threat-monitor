@@ -1,6 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2155
 # shellcheck disable=SC2181
+# shellcheck disable=SC2086
 #
 # force-pfsense-to-reboot.sh
 #
@@ -33,7 +34,7 @@ DELETE_NTOPNG_DB=true        # Set to true to delete the ntopng database after r
 PFSENSE_IP=" ... "
 PFSENSE_PORT=" ... "
 PFSENSE_USER=" ... "
-PFSENSE_PASSWORD=" ..."
+PFSENSE_PASSWORD=" ... "
 
 # pfSense commands
 PFSENSE_REBOOT_CMD="/sbin/reboot"
@@ -41,14 +42,20 @@ PFSENSE_REBOOT_WAIT=120 # Wait time in seconds for pfSense to reboot
 
 PFSENSE_SNORT_STOP_CMD="/usr/local/sbin/pfSsh.php playback svc stop snort"
 # PFSENSE_SNORT_START_CMD="/usr/local/sbin/pfSsh.php playback svc start snort"
-PFSENSE_NTOPNG_STOP_CMD="/usr/local/sbin/pfSsh.php playback svc stop ntopng"
-PFSENSE_NTOPNG_START_CMD="/usr/local/sbin/pfSsh.php playback svc start ntopng"
+PFSENSE_ALL_STATUS_CMD="/usr/local/sbin/pfSsh.php playback svc status snort && /usr/local/sbin/pfSsh.php playback svc status ntopng"
 
+PFSENSE_NTOPNG_STOP_CMD="/usr/local/sbin/pfSsh.php playback svc stop ntopng"
+PFSENSE_NTOPNG_START_PHP_CMD="/usr/local/sbin/pfSsh.php playback svc start ntopng"
+PFSENSE_NTOPNG_START_CMD="/usr/sbin/service ntopng onerestart"
+PFSENSE_NTOPNG_STATUS_PHP_CMD="/usr/local/sbin/pfSsh.php playback svc status ntopng"
+PFSENSE_NTOPNG_STATUS_CMD="/usr/sbin/service ntopng status"
+PFSENSE_NTOPNG_WAIT_FOR_START=180 # Wait time in seconds for ntopng to start
 PFSENSE_NTOPNG_DEL_DB_CMD="rm -rf /var/db/ntopng"
 PFSENSE_NTOPNG_DB_FILES_LS_CMD="ls -alh /var/db/ntopng"
 
-PFSENSE_NTOPNG_REDIS_SET_CMD="redis-cli SET "
-PFSENSE_NTOPNG_REDIS_GET_CMD="redis-cli GET "
+PFSENSE_NTOPNG_REDIS_START_CMD="/usr/sbin/service redis onerestart"
+PFSENSE_NTOPNG_REDIS_SET_CMD="/usr/local/bin/redis-cli SET "
+PFSENSE_NTOPNG_REDIS_GET_CMD="/usr/local/bin/redis-cli GET "
 PFSENSE_NTOPNG_TRUE="00C0010C00ED0ED3762B2B8FB5"
 PFSENSE_NTOPNG_DARK_THEME="00046461726B0C00F26C5C2C00A8A1ED"
 PFSENSE_NTOPNG_KEY_THEME="ntopng.user.admin.theme"
@@ -57,10 +64,8 @@ PFSENSE_NTOPNG_KEY_DISMISS_2="ntopng.user.admin.dismissed_toasts.toast_15"
 PFSENSE_NTOPNG_KEY_DISMISS_3="ntopng.user.admin.dismissed_toasts.toast_18"
 PFSENSE_NTOPNG_KEY_DISMISS_4="ntopng.user.admin.dismissed_toasts.toast_23"
 
-PFSENSE_ALL_STATUS_CMD="/usr/local/sbin/pfSsh.php playback svc status snort && /usr/local/sbin/pfSsh.php playback svc status ntopng"
-PFSENSE_NTOPNG_STATUS_CMD="/usr/local/sbin/pfSsh.php playback svc status ntopng"
+#############################################################
 
-# divide by 2 to get the polling wait time
 PFSENSE_REBOOT_POLLING_WAIT=$((PFSENSE_REBOOT_WAIT / 2))
 
 # Executes a given command on a remote pfSense host via SSH using sshpass for password authentication.
@@ -107,9 +112,9 @@ del_db() {
     echo "-> db files before deletion:"
     remote_execute "$PFSENSE_NTOPNG_DB_FILES_LS_CMD"
     remote_execute "$PFSENSE_NTOPNG_DEL_DB_CMD"
-    echo "-> db files after deletion:"
+    # echo "-> db files after deletion:"
     ret_str="$(remote_execute "$PFSENSE_NTOPNG_DB_FILES_LS_CMD")"
-    echo "$ret_str"
+    # echo "$ret_str"
     if [ -z "$ret_str" ]; then
         echo "ntopng database deleted successfully."
     else
@@ -140,20 +145,34 @@ del_db() {
 # - remote_execute: Function or command to execute commands on the remote pfSense system.
 #
 redis_set_prefs() {
-    local set_cmd="$PFSENSE_NTOPNG_REDIS_SET_CMD \"$PFSENSE_NTOPNG_KEY_THEME\" \"$PFSENSE_NTOPNG_DARK_THEME\"; "
-    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_1\" \"$PFSENSE_NTOPNG_TRUE\"; "
-    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_2\" \"$PFSENSE_NTOPNG_TRUE\"; "
-    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_3\" \"$PFSENSE_NTOPNG_TRUE\"; "
-    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_4\" \"$PFSENSE_NTOPNG_TRUE\""
-    remote_execute "$set_cmd" >/dev/null
-    sleep 2
+    sleep 60
+    echo "Setting ntopng preferences in Redis..."
+    local set_cmd="$PFSENSE_NTOPNG_REDIS_SET_CMD \"$PFSENSE_NTOPNG_KEY_THEME\" \"$PFSENSE_NTOPNG_DARK_THEME\""
+    remote_execute "$set_cmd" >/dev/null &
+    sleep 1
+    set_cmd="$PFSENSE_NTOPNG_REDIS_SET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_1\" \"$PFSENSE_NTOPNG_TRUE\""
+    remote_execute "$set_cmd" >/dev/null &
+    sleep 1
+    set_cmd="$PFSENSE_NTOPNG_REDIS_SET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_2\" \"$PFSENSE_NTOPNG_TRUE\""
+    remote_execute "$set_cmd" >/dev/null &
+    sleep 1
+    set_cmd="$PFSENSE_NTOPNG_REDIS_SET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_3\" \"$PFSENSE_NTOPNG_TRUE\""
+    remote_execute "$set_cmd" >/dev/null &
+    sleep 1
+    set_cmd="$PFSENSE_NTOPNG_REDIS_SET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_4\" \"$PFSENSE_NTOPNG_TRUE\""
+    remote_execute "$set_cmd" >/dev/null &
+    sleep 3
     echo "Retrieving ntopng preferences to verify them."
     echo "Values for keys $PFSENSE_NTOPNG_KEY_THEME, $PFSENSE_NTOPNG_KEY_DISMISS_1, $PFSENSE_NTOPNG_KEY_DISMISS_2, $PFSENSE_NTOPNG_KEY_DISMISS_3, $PFSENSE_NTOPNG_KEY_DISMISS_4 follow:"
-    local get_cmd="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_THEME\"; "
-    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_1\"; "
-    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_2\"; "
-    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_3\"; "
-    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_4\""
+    local get_cmd="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_THEME\""
+    remote_execute "$get_cmd"
+    get_cmd="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_1\""
+    remote_execute "$get_cmd"
+    get_cmd="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_2\""
+    remote_execute "$get_cmd"
+    get_cmd="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_3\""
+    remote_execute "$get_cmd"
+    get_cmd="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_4\""
     remote_execute "$get_cmd"
 
 }
@@ -209,7 +228,8 @@ wait_until_pfsense_is_online() {
 # Otherwise, it returns 1 (failure), indicating ntopng is not running.
 #
 is_ntopng_running() {
-    local status=$(remote_execute "$PFSENSE_NTOPNG_STATUS_CMD")
+    local cmd_to_use="$1"
+    local status=$(remote_execute "$cmd_to_use") # "$PFSENSE_NTOPNG_STATUS_CMD")
     if echo "$status" | grep -q "running"; then
         return 0 # ntopng is running
     else
@@ -228,13 +248,16 @@ is_ntopng_running() {
 #
 wait_until_ntopng_is_running() {
     local seconds_to_try=$1
+    local cmd_to_use="$2"
     local pause_between_checks=2 # seconds
     local times_to_try=$((seconds_to_try / pause_between_checks))
     local count=0
     while [ $count -lt $times_to_try ]; do
-        if is_ntopng_running; then
+        if is_ntopng_running "$cmd_to_use"; then
+            echo "ntopng is running..."
             return 0
         else
+            echo "ntopng not running, waiting $pause_between_checks seconds..."
             sleep $pause_between_checks
             count=$((count + 1))
         fi
@@ -250,9 +273,7 @@ echo "Starting pfSense reboot process..."
 NTOPNG_RUNNING=false
 if [ "$DELETE_NTOPNG_DB" = true ]; then
     echo "Checking if ntopng service is currently running..."
-    ntopng_status=$(remote_execute "$PFSENSE_NTOPNG_STATUS_CMD")
-    echo "DEBUG: ntopng service status string: $ntopng_status"
-    if echo "$ntopng_status" | grep -q "running"; then
+    if is_ntopng_running "$PFSENSE_NTOPNG_STATUS_PHP_CMD"; then
         echo "-> ntopng service is running."
         NTOPNG_RUNNING=true
     else
@@ -275,7 +296,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 echo "pfSense reboot completed."
-sleep 5
+sleep 3
 
 # If PFSENSE_SHUT_DOWN_SRVS is true:
 #     - Shut down the ntopng service remotely.
@@ -286,56 +307,64 @@ sleep 5
 if [ "$PFSENSE_SHUT_DOWN_SRVS" = true ]; then
     echo "Shutting down ntopng service..."
     remote_execute "$PFSENSE_NTOPNG_STOP_CMD"
-    sleep 5
+    sleep 3
     echo "Shutting down Snort service..."
     remote_execute "$PFSENSE_SNORT_STOP_CMD"
-    sleep 5
+    sleep 3
 else
 
     if [ "$DELETE_NTOPNG_DB" = true ]; then
         # If the ntopng database should be deleted, address in one of two ways:
         if [ "$NTOPNG_RUNNING" = true ]; then
 
-            # Scenario 1: if ntopng is expected to resume running after reboot...
-            #  - Wait up to 4 minutes for it to resume.
-            #  - If it does not resume, print an error.
-            #  - If it resumes:
-            #      - Stop the ntopng service.
-            #      - Wait 8 seconds.
-            #      - Delete the ntopng database.
-            #      - Restart the ntopng service.
-            #      - Wait up to 30 seconds for ntopng to be running after restart.
-            #        - If ntopng does not start, print an error.
-            #        - If ntopng starts, set Redis preferences for ntopng.
-            wait_until_ntopng_is_running 240 
+            # Scenario 1: if ntopng is expected to resume running after reboot:
+            wait_until_ntopng_is_running $PFSENSE_NTOPNG_WAIT_FOR_START "$PFSENSE_NTOPNG_STATUS_PHP_CMD"
             if [ $? -ne 0 ]; then
                 echo "ERROR: ntopng never resumed running after reboot."
             else
                 echo "Stopping ntopng service..."
                 remote_execute "$PFSENSE_NTOPNG_STOP_CMD"
-                sleep 8
-                echo "Deleting ntopng database..." 
+                sleep 5
+                echo "Deleting ntopng database..."
                 del_db
-                echo "Restarting ntopng service..."
-                remote_execute "$PFSENSE_NTOPNG_START_CMD"
-                wait_until_ntopng_is_running 30 
-                if [ $? -ne 0 ]; then
-                    echo "ERROR: ntopng did not start after deleting the database."
-                else
-                    echo "Setting ntopng preferences in Redis..."
-                    redis_set_prefs
-                fi
+                # loop 3 times
+                for i in {1..3}; do
+                    echo "Restarting ntopng service..."
+                    remote_execute "$PFSENSE_NTOPNG_REDIS_START_CMD" &
+                    sleep 3
+                    remote_execute "$PFSENSE_NTOPNG_START_CMD" &
+                    sleep 3
+                    remote_execute "$PFSENSE_NTOPNG_START_PHP_CMD" &
+                    sleep 3
+                    echo "Waiting for ntopng to restart..."
+                    wait_until_ntopng_is_running $PFSENSE_NTOPNG_WAIT_FOR_START "$PFSENSE_NTOPNG_STATUS_CMD"
+                    if [ $? -ne 0 ]; then
+                        echo "ERROR: ntopng did not start after deleting the database."
+                        if [ $i -eq 3 ]; then
+                            echo "Giving up after 3 attempts."
+                            break
+                        else
+                            echo "Retrying in 10 seconds..."
+                            sleep 10
+                        fi
+                    else
+                        redis_set_prefs &
+                        break
+                    fi
+                done
+
             fi
         else
-            # Scenario 2: if ntopng is not running...
-            #  - Just delete the ntopng database (Redis preferences cannot be set if ntopng is not running).
+            # Scenario 2: if ntopng is not running, fust delete the ntopng database
+            # (Redis preferences cannot be set if ntopng is not running).
             #
-            echo "Deleting ntopng database (ntopng is not running)..."
+            echo "Deleting ntopng database..."
             del_db
         fi
 
     fi
 fi
 
+sleep 10
 echo "Checking status of Snort and ntopng services:"
 remote_execute "$PFSENSE_ALL_STATUS_CMD"
