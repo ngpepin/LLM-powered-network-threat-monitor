@@ -1,73 +1,341 @@
-#!/bin/sh
-
-# -----------------------------------------------------------------------------
-# Script Name: force-pfsense-to-reboot.sh
+#!/bin/bash
+# shellcheck disable=SC2155
+# shellcheck disable=SC2181
 #
-# Description:
-#   This script remotely reboots a pfSense firewall via SSH and optionally
-#   manages the Snort and ntopng services after reboot. It uses `sshpass` to
-#   provide the password for SSH authentication.
+# force-pfsense-to-reboot.sh
 #
-#   - Reboots the pfSense device at the specified IP and port.
-#   - Waits for the device to come back online.
-#   - Depending on the PFSENSE_SHUT_DOWN_SRVS flag:
-#       - If true: Stops Snort and ntopng services.
-#       - If false: Starts Snort and ntopng services.
-#   - Checks and displays the status of Snort and ntopng services.
+# This script automates the process of rebooting a remote pfSense firewall and managing the ntopng and Snort services.
+# It provides options to:
+#   - Reboot the pfSense system via SSH.
+#   - Optionally stop Snort and ntopng services after reboot.
+#   - Optionally delete the ntopng database after reboot (with service management logic), and
+#     set ntopng preferences in Redis.
 #
-# Variables:
-#   PFSENSE_SHUT_DOWN_SRVS   : Set to 'true' to stop services after reboot, 'false' to start them.
-#   PFSENSE_IP               : IP address of the pfSense device.
-#   PFSENSE_PORT             : SSH port for pfSense.
-#   PFSENSE_USER             : SSH username for pfSense.
-#   PFSENSE_PASSWORD         : SSH password for pfSense.
-#   PFSENSE_REBOOT_CMD       : Command to reboot pfSense.
-#   PFSENSE_REBOOT_WAIT      : Wait time in seconds for pfSense to reboot.
-#   PFSENSE_SNORT_STOP_CMD   : Command to stop Snort service.
-#   PFSENSE_NTOPNG_STOP_CMD  : Command to stop ntopng service.
-#   PFSENSE_SNORT_START_CMD  : Command to start Snort service.
-#   PFSENSE_NTOPNG_START_CMD : Command to start ntopng service.
-#   PFSENSE_STATUS_CMD       : Command to check status of Snort and ntopng.
-#
-# Requirements:
-#   - sshpass must be installed on the system running this script.
-#   - SSH access must be enabled on pfSense.
+# Configuration:
+#   - Set SSH connection parameters (IP, port, user, password).
+#   - Set PFSENSE_SHUT_DOWN_SRVS to true to stop Snort and ntopng after reboot.
+#   - Set DELETE_NTOPNG_DB to true to delete the ntopng database after reboot (requires PFSENSE_SHUT_DOWN_SRVS=false).
 #
 # Usage:
-#   Edit the variables as needed, then run the script.
-# -----------------------------------------------------------------------------
+#   - Run the script to reboot pfSense and manage services as configured.
+#   - The script prints progress and error messages to the console.
+#
+# Dependencies:
+#   - sshpass
+#   - pfSense with SSH enabled and pfSsh.php available
+#   - Redis CLI on pfSense for ntopng preferences
+#
 
-# Set to true to stop Snort and ntopng services after reboot, false to ensure they are started
-PFSENSE_SHUT_DOWN_SRVS=false
+PFSENSE_SHUT_DOWN_SRVS=false # Set to true to stop Snort and ntopng services after reboot
+DELETE_NTOPNG_DB=true        # Set to true to delete the ntopng database after reboot; PFSENSE_SHUT_DOWN_SRVS must be false for this to take effect
 
 # SSH connection parameters
-PFSENSE_IP="..."
-PFSENSE_PORT="..."
-PFSENSE_USER="..."
-PFSENSE_PASSWORD="..."
+PFSENSE_IP=" ... "
+PFSENSE_PORT=" ... "
+PFSENSE_USER=" ... "
+PFSENSE_PASSWORD=" ..."
 
 # pfSense commands
 PFSENSE_REBOOT_CMD="/sbin/reboot"
-PFSENSE_REBOOT_WAIT=180 # Wait time in seconds for pfSense to reboot
+PFSENSE_REBOOT_WAIT=120 # Wait time in seconds for pfSense to reboot
+
 PFSENSE_SNORT_STOP_CMD="/usr/local/sbin/pfSsh.php playback svc stop snort"
+# PFSENSE_SNORT_START_CMD="/usr/local/sbin/pfSsh.php playback svc start snort"
 PFSENSE_NTOPNG_STOP_CMD="/usr/local/sbin/pfSsh.php playback svc stop ntopng"
-PFSENSE_SNORT_START_CMD="/usr/local/sbin/pfSsh.php playback svc start snort"
 PFSENSE_NTOPNG_START_CMD="/usr/local/sbin/pfSsh.php playback svc start ntopng"
-PFSENSE_STATUS_CMD="/usr/local/sbin/pfSsh.php playback svc status snort && /usr/local/sbin/pfSsh.php playback svc status ntopng"
 
-sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_REBOOT_CMD"
-sleep $PFSENSE_REBOOT_WAIT
+PFSENSE_NTOPNG_DEL_DB_CMD="rm -rf /var/db/ntopng"
+PFSENSE_NTOPNG_DB_FILES_LS_CMD="ls -alh /var/db/ntopng"
 
-if [ "$PFSENSE_SHUT_DOWN_SRVS" = true ]; then
-    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_SNORT_STOP_CMD"
-    sleep 4
-    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_NTOPNG_STOP_CMD"
-    sleep 4
-else
-    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_SNORT_START_CMD"
-    sleep 4
-    sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_NTOPNG_START_CMD"
-    sleep 4
+PFSENSE_NTOPNG_REDIS_SET_CMD="redis-cli SET "
+PFSENSE_NTOPNG_REDIS_GET_CMD="redis-cli GET "
+PFSENSE_NTOPNG_TRUE="00C0010C00ED0ED3762B2B8FB5"
+PFSENSE_NTOPNG_DARK_THEME="00046461726B0C00F26C5C2C00A8A1ED"
+PFSENSE_NTOPNG_KEY_THEME="ntopng.user.admin.theme"
+PFSENSE_NTOPNG_KEY_DISMISS_1="ntopng.user.admin.dismissed_toasts.toast_12"
+PFSENSE_NTOPNG_KEY_DISMISS_2="ntopng.user.admin.dismissed_toasts.toast_15"
+PFSENSE_NTOPNG_KEY_DISMISS_3="ntopng.user.admin.dismissed_toasts.toast_18"
+PFSENSE_NTOPNG_KEY_DISMISS_4="ntopng.user.admin.dismissed_toasts.toast_23"
+
+PFSENSE_ALL_STATUS_CMD="/usr/local/sbin/pfSsh.php playback svc status snort && /usr/local/sbin/pfSsh.php playback svc status ntopng"
+PFSENSE_NTOPNG_STATUS_CMD="/usr/local/sbin/pfSsh.php playback svc status ntopng"
+
+# divide by 2 to get the polling wait time
+PFSENSE_REBOOT_POLLING_WAIT=$((PFSENSE_REBOOT_WAIT / 2))
+
+# Executes a given command on a remote pfSense host via SSH using sshpass for password authentication.
+#
+# Globals:
+#   PFSENSE_PASSWORD - Password for the pfSense SSH user.
+#   PFSENSE_PORT     - SSH port of the pfSense host.
+#   PFSENSE_USER     - Username for SSH login.
+#   PFSENSE_IP       - IP address of the pfSense host.
+#
+# Arguments:
+#   $1 - The command to execute remotely.
+#
+# Outputs:
+#   Prints the command output if successful, or an empty string if the SSH command fails.
+#
+remote_execute() {
+    local command="$1"
+
+    local ret_str="$(sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$PFSENSE_PORT" "${PFSENSE_USER}@${PFSENSE_IP}" "$command")"
+    local ret_status=$?
+
+    if [ $ret_status -ne 0 ]; then
+        echo ""
+    else
+        echo "$ret_str"
+    fi
+}
+
+# del_db
+# ------
+# Deletes the ntopng database on the remote pfSense system.
+# - Prints a message indicating the deletion process.
+# - Lists the ntopng database files before deletion by executing a remote command.
+# - Executes the remote command to delete the ntopng database.
+# - Lists the ntopng database files after deletion to confirm removal.
+# Requires the following variables to be set:
+#   PFSENSE_NTOPNG_DB_FILES_LS_CMD: Command to list ntopng database files on pfSense.
+#   PFSENSE_NTOPNG_DEL_DB_CMD: Command to delete the ntopng database on pfSense.
+#   remote_execute: Function to execute commands on the remote pfSense system.
+#
+del_db() {
+    local ret_str=""
+    echo "-> db files before deletion:"
+    remote_execute "$PFSENSE_NTOPNG_DB_FILES_LS_CMD"
+    remote_execute "$PFSENSE_NTOPNG_DEL_DB_CMD"
+    echo "-> db files after deletion:"
+    ret_str="$(remote_execute "$PFSENSE_NTOPNG_DB_FILES_LS_CMD")"
+    echo "$ret_str"
+    if [ -z "$ret_str" ]; then
+        echo "ntopng database deleted successfully."
+    else
+        echo "ERROR: ntopng database deletion may have failed as there are still files present."
+        return 1
+    fi
+    return 0
+}
+
+# redis_set_prefs
+# ----------------
+# Sets basic ntopng preferences in Redis on the remote pfSense system and verifies the changes.
+#
+# This function performs the following steps:
+# 1. Sets ntopng preferences (theme and dismiss flags) in Redis using remote execution.
+# 2. Waits briefly to ensure the settings are applied.
+# 3. Retrieves and displays the values of the set preferences to verify correctness.
+#
+# Environment Variables Used:
+# - PFSENSE_NTOPNG_REDIS_SET_CMD: Command to set a Redis key-value pair.
+# - PFSENSE_NTOPNG_REDIS_GET_CMD: Command to get a Redis key value.
+# - PFSENSE_NTOPNG_KEY_THEME: Redis key for ntopng theme.
+# - PFSENSE_NTOPNG_DARK_THEME: Value for dark theme.
+# - PFSENSE_NTOPNG_KEY_DISMISS_1..4: Redis keys for dismiss flags (toast notifications).
+# - PFSENSE_NTOPNG_TRUE: Value representing 'true' for dismiss flags.
+#
+# Dependencies:
+# - remote_execute: Function or command to execute commands on the remote pfSense system.
+#
+redis_set_prefs() {
+    local set_cmd="$PFSENSE_NTOPNG_REDIS_SET_CMD \"$PFSENSE_NTOPNG_KEY_THEME\" \"$PFSENSE_NTOPNG_DARK_THEME\"; "
+    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_1\" \"$PFSENSE_NTOPNG_TRUE\"; "
+    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_2\" \"$PFSENSE_NTOPNG_TRUE\"; "
+    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_3\" \"$PFSENSE_NTOPNG_TRUE\"; "
+    set_cmd+="\"$PFSENSE_NTOPNG_REDIS_SET_CMD\" \"$PFSENSE_NTOPNG_KEY_DISMISS_4\" \"$PFSENSE_NTOPNG_TRUE\""
+    remote_execute "$set_cmd" >/dev/null
+    sleep 2
+    echo "Retrieving ntopng preferences to verify them."
+    echo "Values for keys $PFSENSE_NTOPNG_KEY_THEME, $PFSENSE_NTOPNG_KEY_DISMISS_1, $PFSENSE_NTOPNG_KEY_DISMISS_2, $PFSENSE_NTOPNG_KEY_DISMISS_3, $PFSENSE_NTOPNG_KEY_DISMISS_4 follow:"
+    local get_cmd="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_THEME\"; "
+    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_1\"; "
+    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_2\"; "
+    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_3\"; "
+    get_cmd+="$PFSENSE_NTOPNG_REDIS_GET_CMD \"$PFSENSE_NTOPNG_KEY_DISMISS_4\""
+    remote_execute "$get_cmd"
+
+}
+
+# wait_until_pfsense_is_online
+# --------------------------------
+# Waits for the pfSense system to come back online by repeatedly attempting to execute
+# a remote command (`ls /`) via the `remote_execute` function. The function checks
+# every 2 seconds, up to a maximum number of attempts determined by the input parameter
+# prior to timing out.
+#
+# Arguments:
+#   $1 - Total number of seconds to wait for pfSense to become available.
+#
+# Returns:
+#   0 if pfSense becomes available within the specified time.
+#   1 if pfSense does not become available within the specified time.
+#
+# Usage:
+#   wait_until_pfsense_is_online 60
+#
+# Dependencies:
+#   Requires a function named `remote_execute` to be defined elsewhere, which should
+#   attempt to run a command on the pfSense system and return success if reachable.
+#
+wait_until_pfsense_is_online() {
+    local seconds_to_try=$1
+    local pause_between_checks=2 # seconds
+    local times_to_try=$((seconds_to_try / pause_between_checks))
+    local count=0
+    echo "Checking if pfSense is back online..."
+    while [ $count -lt $times_to_try ]; do
+        if remote_execute "ls /" >/dev/null 2>&1; then
+            echo ""
+            echo "pfSense is now online."
+            return 0
+        else
+            echo -n "."
+            sleep $pause_between_checks
+            count=$((count + 1))
+        fi
+    done
+    echo ""
+    return 1 # pfSense did not come back online
+}
+
+# is_ntopng_running
+# -------------------
+# Checks if the ntopng service is running on the remote pfSense system.
+# Uses the remote_execute function to run the status command specified by
+# the PFSENSE_NTOPNG_STATUS_CMD variable. If the output contains "running",
+# the function returns 0 (success), indicating ntopng is running.
+# Otherwise, it returns 1 (failure), indicating ntopng is not running.
+#
+is_ntopng_running() {
+    local status=$(remote_execute "$PFSENSE_NTOPNG_STATUS_CMD")
+    if echo "$status" | grep -q "running"; then
+        return 0 # ntopng is running
+    else
+        return 1 # ntopng is not running
+    fi
+}
+
+# wait_until_ntopng_is_running
+# ---------------------------------
+# Waits until the ntopng service is running or a timeout is reached.
+# Arguments:
+#   $1 - Total number of seconds to wait for ntopng to start.
+# Returns:
+#   0 if ntopng is running within the timeout period.
+#   1 if ntopng did not start within the timeout period.
+#
+wait_until_ntopng_is_running() {
+    local seconds_to_try=$1
+    local pause_between_checks=2 # seconds
+    local times_to_try=$((seconds_to_try / pause_between_checks))
+    local count=0
+    while [ $count -lt $times_to_try ]; do
+        if is_ntopng_running; then
+            return 0
+        else
+            sleep $pause_between_checks
+            count=$((count + 1))
+        fi
+    done
+    return 1 # ntopng did not start
+}
+
+echo "Starting pfSense reboot process..."
+
+# In order to know if ntopng is expected to run after reboot, we need to check if the ntopng service is running before # rebooting the pfSense firewall.
+# This is only necessary if the DELETE_NTOPNG_DB variable is set to true, i.e., the database should be deleted after reboot.
+#
+NTOPNG_RUNNING=false
+if [ "$DELETE_NTOPNG_DB" = true ]; then
+    echo "Checking if ntopng service is currently running..."
+    ntopng_status=$(remote_execute "$PFSENSE_NTOPNG_STATUS_CMD")
+    echo "DEBUG: ntopng service status string: $ntopng_status"
+    if echo "$ntopng_status" | grep -q "running"; then
+        echo "-> ntopng service is running."
+        NTOPNG_RUNNING=true
+    else
+        echo "-> ntopng service is not running."
+        NTOPNG_RUNNING=false
+    fi
 fi
 
-sshpass -p "$PFSENSE_PASSWORD" ssh -o StrictHostKeyChecking=no -p $PFSENSE_PORT "${PFSENSE_USER}@${PFSENSE_IP}" "$PFSENSE_STATUS_CMD"
+# Initiate a remote reboot of a pfSense firewall, waiting for it to restart
+# and verifying that it comes back online. If the firewall does not become reachable
+# within the expected polling interval, the script exits with an error.
+#
+echo "Rebooting pfSense..."
+remote_execute "$PFSENSE_REBOOT_CMD"
+echo "Waiting for pfSense to restart..."
+sleep $PFSENSE_REBOOT_POLLING_WAIT
+wait_until_pfsense_is_online "$PFSENSE_REBOOT_POLLING_WAIT"
+if [ $? -ne 0 ]; then
+    echo "ERROR: pfSense did not come back online after reboot request."
+    exit 1
+fi
+echo "pfSense reboot completed."
+sleep 5
+
+# If PFSENSE_SHUT_DOWN_SRVS is true:
+#     - Shut down the ntopng service remotely.
+#     - Wait 5 seconds.
+#     - Shut down the Snort service remotely.
+#     - Wait 5 seconds.
+#
+if [ "$PFSENSE_SHUT_DOWN_SRVS" = true ]; then
+    echo "Shutting down ntopng service..."
+    remote_execute "$PFSENSE_NTOPNG_STOP_CMD"
+    sleep 5
+    echo "Shutting down Snort service..."
+    remote_execute "$PFSENSE_SNORT_STOP_CMD"
+    sleep 5
+else
+
+    if [ "$DELETE_NTOPNG_DB" = true ]; then
+        # If the ntopng database should be deleted, address in one of two ways:
+        if [ "$NTOPNG_RUNNING" = true ]; then
+
+            # Scenario 1: if ntopng is expected to resume running after reboot...
+            #  - Wait up to 4 minutes for it to resume.
+            #  - If it does not resume, print an error.
+            #  - If it resumes:
+            #      - Stop the ntopng service.
+            #      - Wait 8 seconds.
+            #      - Delete the ntopng database.
+            #      - Restart the ntopng service.
+            #      - Wait up to 30 seconds for ntopng to be running after restart.
+            #        - If ntopng does not start, print an error.
+            #        - If ntopng starts, set Redis preferences for ntopng.
+            wait_until_ntopng_is_running 240 
+            if [ $? -ne 0 ]; then
+                echo "ERROR: ntopng never resumed running after reboot."
+            else
+                echo "Stopping ntopng service..."
+                remote_execute "$PFSENSE_NTOPNG_STOP_CMD"
+                sleep 8
+                echo "Deleting ntopng database..." 
+                del_db
+                echo "Restarting ntopng service..."
+                remote_execute "$PFSENSE_NTOPNG_START_CMD"
+                wait_until_ntopng_is_running 30 
+                if [ $? -ne 0 ]; then
+                    echo "ERROR: ntopng did not start after deleting the database."
+                else
+                    echo "Setting ntopng preferences in Redis..."
+                    redis_set_prefs
+                fi
+            fi
+        else
+            # Scenario 2: if ntopng is not running...
+            #  - Just delete the ntopng database (Redis preferences cannot be set if ntopng is not running).
+            #
+            echo "Deleting ntopng database (ntopng is not running)..."
+            del_db
+        fi
+
+    fi
+fi
+
+echo "Checking status of Snort and ntopng services:"
+remote_execute "$PFSENSE_ALL_STATUS_CMD"

@@ -335,7 +335,7 @@ else
           echo "No change to whitelist file required. No backup created."
         fi
       fi
-      rm -f "$TEMP_FILE_2"
+      rm -f "$TEMP_FILE_2" >/dev/null 2>&1
 
       # Print termination message
       echo "extract-good-ips-from-block-list.sh completed successfully."

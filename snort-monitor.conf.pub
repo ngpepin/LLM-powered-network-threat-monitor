@@ -18,7 +18,7 @@ LOCAL_USER_AND_GROUP=" ... "         # User and group for local file permissions
 DELETE_BLOCK_LISTS_AFTER=28          # Number of days to keep the block list files before deleting them
 
 # pfSense-specific parameters
-INCLUDE_NTOPNG_LOGS=false                              # Whether to include ntopng logs in the analysis
+INCLUDE_NTOPNG_LOGS=true                               # Whether to include ntopng logs in the analysis
 PFSENSE_DIR="/var/log/pfsense"                         # Directory where pfSense logs are stored
 LOG_DIR="$PFSENSE_DIR/..."                             # Directory for pfSense logs
 ALT_LOG_DIR="$PFSENSE_DIR/..."                         # Alternate directory for pfSense logs
