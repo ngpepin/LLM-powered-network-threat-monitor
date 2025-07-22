@@ -30,3 +30,4 @@ analysis-tools/velop-status-report.md
 get-pfsense-thermal.sh
 force-pfsense-to-reboot.sh
 API-reference
+.vscode

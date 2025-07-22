@@ -78,7 +78,7 @@ API_ENDPOINT='<provide in .conf file>' # API endpoint for the AI service
 API_KEY="<provide in .conf file>"      # OpenAI API key
 MODEL="<provide in .conf file>"        # Model to use for the AI service (e.g., gpt-4o)
 
-# Default configuration variables THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF
+# Default configuration variables *** THAT SHOULD BE OVERRIDDEN IN SNORT-MONITOR.CONF ***
 UPDATE_INTERVAL=99999            # Interval to check for new logs (in seconds)
 AUTO_UPDATE_WHITELIST_BOOL=false # Whether to automatically update the whitelist
 AUTO_UPDATE_HOUR_1="02:00"       # Time of day to update the whitelist #1 (24-hour format, e.g., "14:30" for 2:30 PM)
@@ -108,8 +108,8 @@ MONITOR_PFSENSE_THERMALS=false                         # Whether to monitor pfSe
 PFSENSE_THERMALS_LOG="$SCRIPT_DIR/pfsense-thermal.log" # Path to the pfSense thermal log file
 PFSENSE_THERMALS_INTERVAL=10                           # Interval to check pfSense thermal sensor (in seconds) - min is 10 sec
 
-PFSENSE_RESTART=true         # Whether to restart pfSense
-PFSENSE_RESTART_HOUR="05:00" # Time of day to restart pfSense
+PFSENSE_RESTART=false         # Whether to restart pfSense
+PFSENSE_RESTART_HOUR="05:00"  # Time of day to restart pfSense
 
 #------------------------------------------------------------------------------
 
@@ -965,7 +965,7 @@ update_analysis() {
                 }
             ],
             temperature: 0.7,
-            max_tokens: 120000 
+            max_tokens: 100000 
         }')
 
         printf "Last request JSON for Analysis:\n%s\n" "$request_json" >"$SCRIPT_DIR/last_analysis_request.log"
@@ -1045,7 +1045,7 @@ The following IPs have already been blocked so you do not need to include them i
                    {role: "user",   content: $user_content}
                  ],
                  temperature: 0.1,
-                 max_tokens: 120000
+                 max_tokens: 100000
                }'
         )
 
