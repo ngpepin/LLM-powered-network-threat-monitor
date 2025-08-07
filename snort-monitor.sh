@@ -108,8 +108,8 @@ MONITOR_PFSENSE_THERMALS=false                         # Whether to monitor pfSe
 PFSENSE_THERMALS_LOG="$SCRIPT_DIR/pfsense-thermal.log" # Path to the pfSense thermal log file
 PFSENSE_THERMALS_INTERVAL=10                           # Interval to check pfSense thermal sensor (in seconds) - min is 10 sec
 
-PFSENSE_RESTART=false         # Whether to restart pfSense
-PFSENSE_RESTART_HOUR="05:00"  # Time of day to restart pfSense
+PFSENSE_RESTART=false        # Whether to restart pfSense
+PFSENSE_RESTART_HOUR="05:00" # Time of day to restart pfSense
 
 #------------------------------------------------------------------------------
 
@@ -943,9 +943,7 @@ update_analysis() {
         if [ -n "$blocked_ips" ]; then
             blocked_ips="--------------------------------------------------- ALREADY BLOCKED IPs: --------------------------------------------------- $blocked_ips"
         fi
-
-        # Prepare the API request
-        ANALYSIS_PROMPT_TEXT="${ANALYSIS_PROMPT_TEXT//<insert_date>/$time_now}"
+        export TOKEN_LIMIT # make max tokens setting available to jq
         request_json=$(jq -n \
             --arg model "$MODEL" \
             --arg system_content "$ANALYSIS_PROMPT_TEXT" \
@@ -965,9 +963,9 @@ update_analysis() {
                 }
             ],
             temperature: 0.7,
-            max_tokens: 100000 
+            max_tokens: env.TOKEN_LIMIT | tonumber
         }')
-
+# env.TOKEN_LIMIT | tonumber
         printf "Last request JSON for Analysis:\n%s\n" "$request_json" >"$SCRIPT_DIR/last_analysis_request.log"
 
         # Call the API with a request for an analysis
@@ -1030,6 +1028,7 @@ update_analysis() {
 
         # Create a list of IPs to block
         # if [[ "$highest_threat_level" == "HIGH" ]] || [[ "$initial_consolidation" == "true" ]]; then
+        export TOKEN_LIMIT # make max tokens setting available to jq
         request_json=$(
             jq -n \
                 --arg model "$MODEL" \
@@ -1045,7 +1044,7 @@ The following IPs have already been blocked so you do not need to include them i
                    {role: "user",   content: $user_content}
                  ],
                  temperature: 0.1,
-                 max_tokens: 100000
+                 max_tokens: env.TOKEN_LIMIT | tonumber
                }'
         )
 
@@ -1178,43 +1177,45 @@ calculate_perturbed_interval() {
 #
 update_whitelist_runner() {
     local run_hour="$1"
+    if [ -n "$run_hour" ]; then
 
-    local files_deleted=false
+        local files_deleted=false
 
-    # Background loop running task at run_hour daily
-    if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
-        local script_output=""
-        while true; do
-            # Calculate now and next AUTO_UPDATE_HOUR
-            now=$(date +%s)
-            target=$(date -d "today $run_hour" +%s)
-            if ((now >= target)); then
-                target=$(date -d "tomorrow $run_hour" +%s)
-            fi
-            sleep $((target - now))
+        # Background loop running task at run_hour daily
+        if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
+            local script_output=""
+            while true; do
+                # Calculate now and next AUTO_UPDATE_HOUR
+                now=$(date +%s)
+                target=$(date -d "today $run_hour" +%s)
+                if ((now >= target)); then
+                    target=$(date -d "tomorrow $run_hour" +%s)
+                fi
+                sleep $((target - now))
 
-            log "Auto-updating whitelist now..."
+                log "Auto-updating whitelist now..."
 
-            # Run the whitelist update script
-            echo "Running whitelist update script: $SCRIPT_DIR/extract-good-ips-from-block-list.sh"
-            script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
-            log "Whitelist update script output: $script_output"
-            echo "$script_output" >"$SCRIPT_DIR/whitelist_update.log"
-            sudo chown "$LOCAL_USER_AND_GROUP" "$SCRIPT_DIR/whitelist_update.log"
-            sudo chmod 666 "$SCRIPT_DIR/whitelist_update.log"
+                # Run the whitelist update script
+                echo "Running whitelist update script: $SCRIPT_DIR/extract-good-ips-from-block-list.sh"
+                script_output="$($SCRIPT_DIR/extract-good-ips-from-block-list.sh)"
+                log "Whitelist update script output: $script_output"
+                echo "$script_output" >"$SCRIPT_DIR/whitelist_update.log"
+                sudo chown "$LOCAL_USER_AND_GROUP" "$SCRIPT_DIR/whitelist_update.log"
+                sudo chmod 666 "$SCRIPT_DIR/whitelist_update.log"
 
-            # Delete old block list files
-            files_deleted=$(delete_old_block_lists)
-            if [ "$files_deleted" = true ]; then
-                disable_auto_consolidation
-                consolidate_ips
-                sleep 1
-                enable_auto_consolidation
-            fi
+                # Delete old block list files
+                files_deleted=$(delete_old_block_lists)
+                if [ "$files_deleted" = true ]; then
+                    disable_auto_consolidation
+                    consolidate_ips
+                    sleep 1
+                    enable_auto_consolidation
+                fi
 
-        done
+            done
+
+        fi
     fi
-
 }
 
 # restart_pfsense_periodically
@@ -1374,8 +1375,20 @@ trap cleanup EXIT
 
 log "Alert Web server started with PID: $ALERT_WEB_SERVER_PID"
 log "Block list monitor running (PID: $MONITOR_PID)"
-log "Whitelist updater #1 ($AUTO_UPDATE_HOUR_1) running (PID: $WHITELIST_UPDATER_1_PID)"
-log "Whitelist updater #2 ($AUTO_UPDATE_HOUR_2) running (PID: $WHITELIST_UPDATER_2_PID)"
+if [ "$AUTO_UPDATE_WHITELIST_BOOL" = true ]; then
+    if [ -n "$AUTO_UPDATE_HOUR_1" ]; then
+        log "Whitelist updater #1 ($AUTO_UPDATE_HOUR_1) running (PID: $WHITELIST_UPDATER_1_PID)"
+    else
+        log "Whitelist updater #1 innactive."
+    fi
+    if [ -n "$AUTO_UPDATE_HOUR_2" ]; then
+        log "Whitelist updater #2 ($AUTO_UPDATE_HOUR_2) running (PID: $WHITELIST_UPDATER_2_PID)"
+    else
+        log "Whitelist updater #2 innactive."
+    fi
+else
+    log "Whitelist updaters are disabled."
+fi
 log "Block list web server running (PID: $BLOCK_LIST_WEB_SERVER_PID)"
 log "Whitelist file: $WHITELIST_FILE"
 log "Block-list file: $CONSOLIDATED_FILE"

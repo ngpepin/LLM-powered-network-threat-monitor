@@ -36,6 +36,7 @@ PFSENSE_RESTART_HOUR="05:00"                           # Time of day to restart 
 API_ENDPOINT=' ... '                                   # API endpoint for the AI service
 API_KEY=" ... "                                        # OpenAI API key 
 MODEL=" ... "                                          # Model to use for the AI service (e.g., gpt-4o)
+TOKEN_LIMIT=90000                                      # Token limit for the AI service   
 
 # ------------ LOG ANALYSIS PROMPT ------------ #
 read -r -d '' ANALYSIS_PROMPT_TEXT <<'EOF'
