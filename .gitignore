@@ -32,3 +32,7 @@ force-pfsense-to-reboot.sh
 API-reference
 .vscode
 .vscode
+parsed.csv
+output.csv
+pause
+exec-pause
