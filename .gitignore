@@ -36,3 +36,5 @@ parsed.csv
 output.csv
 pause
 exec-pause
+.vscode
+~
