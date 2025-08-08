@@ -1361,7 +1361,7 @@ else
 fi
 
 # Start the periodic pfSense restart daemon if configured
-if [ "$PFSENSE_RESTART" ]; then
+if [ "$PFSENSE_RESTART" = true ]; then
     restart_pfsense_periodically $PFSENSE_RESTART_HOUR &
     PFSENSE_RESTART_PID=$!
     log "pfSense periodic restart daemon PID: $PFSENSE_RESTART_PID"
