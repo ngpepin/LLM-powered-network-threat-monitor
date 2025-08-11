@@ -1,71 +1,134 @@
 #!/bin/bash
 # Shellcheck directives
-# shellcheck disable=SC2155
-# shellcheck disable=SC2181
-# shellcheck disable=SC1091
-# shellcheck disable=SC2086
-# shellcheck disable=SC2001
-# shellcheck disable=SC1090
+# shellcheck disable=SC2155  # Declares and assigns variable in the same statement (potential masking of errors)
+# shellcheck disable=SC2181  # Uses $? indirectly instead of checking exit code directly with if/then construct
+# shellcheck disable=SC1091  # Not following sourced files due to external dependencies
+# shellcheck disable=SC2086  # Double quoting omitted to allow word splitting where needed
+# shellcheck disable=SC2001  # Uses sed instead of bash parameter expansion for string manipulation
+# shellcheck disable=SC1090  # Can't follow non-constant source references dynamically constructed
 ###############################################################################
 #
 # snort-monitor.sh
 # -----------------------------------------------------------------------------
 #
 # Overview:
-#   This script provides a comprehensive monitoring and automation solution for
-#   correlating Snort and ntopng logs, generating threat analysis reports,
-#   maintaining block lists for pfSense/pfBlockerNG, and serving a web-based
-#   dashboard for real-time security visibility.
+#   A comprehensive network security monitoring solution that correlates Snort
+#   and ntopng logs, leverages AI for threat analysis, manages firewall block
+#   lists, and provides real-time security visibility via a web dashboard.
+#   Designed for integration with pfSense environments to enhance intrusion
+#   detection capabilities through machine learning and automation.
 #
-# Features:
-#   - Loads configuration from an external .conf file for flexible deployment.
-#   - Periodically analyzes Snort and ntopng logs, correlating events.
-#   - Submits log data to an LLM API for advanced threat analysis and block list
-#     generation, using customizable prompt templates.
-#   - Generates HTML and PDF threat reports, including structured sections and
-#     technical discussions.
-#   - Maintains and consolidates block lists, applying whitelist filtering and
-#     public IP validation.
-#   - Serves a web dashboard with automatic refresh and cache control.
-#   - Provides a secondary HTTP server for sharing consolidated block lists with the
-#     pfSense firewall.
-#   - Supports automatic whitelist updates at a scheduled time.
-#   - Handles dependency installation, log rotation, and cleanup of old files.
-#   - Implements randomized intervals for analysis to avoid predictable patterns.
+# Core Capabilities:
+#   - AI-Powered Threat Analysis: 
+#     * Submits correlated log data to LLM API for contextual threat assessment
+#     * Uses customizable prompt templates for consistent analysis
+#     * Extracts structured threat information including severity levels
+#     * Identifies attack patterns, potential vulnerabilities, and recommended actions
 #
-# Main Components:
-#   - Configuration loading and variable initialization.
-#   - Dependency checks and installation.
-#   - Web server setup for dashboard and block list sharing.
-#   - Utility functions for encoding, escaping, and file management.
-#   - Core functions:
-#       * save_PDF_report: Generates PDF from HTML analysis.
-#       * create_webpage: Builds the HTML dashboard.
-#       * is_public_ip: Validates routable IPv4 addresses.
-#       * consolidate_ips: Aggregates and filters block list IPs.
-#       * update_analysis: Orchestrates log analysis, API calls, reporting, and
-#         block list generation.
-#       * calculate_perturbed_interval: Adds jitter to analysis intervals.
-#       * update_whitelist_runner: Schedules daily whitelist updates.
-#   - Background monitoring and cleanup logic.
-#   - Main loop for periodic analysis and dashboard updates.
+#   - Block List Management: 
+#     * Auto-generates IP block lists based on threat analysis
+#     * Validates IP addresses against RFC standards for public routability
+#     * Implements whitelist protection for critical infrastructure
+#     * Consolidates and de-duplicates entries from multiple sources
+#     * Provides HTTP endpoint for pfBlockerNG integration
+#
+#   - Real-time Security Dashboard: 
+#     * Web interface with automatic refresh based on configurable intervals
+#     * Visual indicators for threat levels and IP status (blocked/whitelisted)
+#     * Historical log display with correlation between Snort and ntopng events
+#     * Cache control headers for optimal browser performance
+#
+#   - Reporting and Documentation: 
+#     * Generates timestamped PDF security reports
+#     * Maintains analysis history for pattern recognition
+#     * Structured HTML output with color-coded threat levels
+#     * Technical discussions of attack vectors and mitigation strategies
+#
+#   - System Maintenance:
+#     * Automatic dependency checking and installation
+#     * Configurable log rotation and retention policies
+#     * File permission management for web server access
+#     * Optional pfSense thermal monitoring and restart capabilities
+#
+# Technical Architecture:
+#   - Configuration Framework:
+#     * External .conf file for environment-specific settings
+#     * Variable initialization with appropriate defaults
+#     * Support for custom initialization scripts
+#
+#   - Process Management:
+#     * Parallel background processes with proper signal handling
+#     * PID tracking for all child processes
+#     * Graceful shutdown with cleanup procedures
+#     * Automatic restart of crashed components
+#
+#   - Security Mechanisms:
+#     * Randomized analysis intervals with configurable perturbation
+#     * Input validation and sanitization for API interactions
+#     * HTML/JSON escaping to prevent injection vulnerabilities
+#     * Base64 encoding for safe parameter passing
+#
+#   - Integration Points:
+#     * pfSense firewall connectivity monitoring
+#     * Block list HTTP server for firewall consumption
+#     * Command execution for firewall reconfiguration
+#     * Optional thermal monitoring interface
+#
+# Key Functions:
+#   - update_analysis(): Orchestrates log collection, API calls, and reporting
+#   - consolidate_ips(): Processes and filters IP addresses for block lists
+#   - create_webpage(): Generates the HTML dashboard with current threat data
+#   - save_PDF_report(): Creates PDF documentation of security incidents
+#   - is_public_ip(): Validates IP addresses against RFC standards
+#   - calculate_perturbed_interval(): Implements timing randomization
+#   - update_whitelist_runner(): Schedules and executes whitelist maintenance
+#   - log_pfsense_thermals(): Monitors firewall hardware temperatures
+#
+# Configuration Parameters:
+#   - API credentials and endpoints for LLM integration
+#   - File paths for logs, reports, and web content
+#   - Update intervals and perturbation settings
+#   - Whitelist management preferences
+#   - Web server port configuration
+#   - pfSense-specific settings
 #
 # Usage:
-#   - Place this script and its .conf file in the same directory.
-#   - Ensure required dependencies are installed (the script will attempt to
-#     install missing ones).
-#   - Configure paths, API credentials, and operational parameters in the .conf
-#     file.
-#   - Run the script as a service or in the background.
+#   1. Create snort-monitor.conf with environment-specific settings
+#   2. Ensure required directories exist and are writable
+#   3. Run as a service: systemctl start snort-monitor
+#   4. Access dashboard: http://[server-ip]:9999
+#   5. Access block lists: http://[server-ip]:9998
+#   6. View PDF reports in configured reports directory
 #
-# Dependencies:
-#   - bash, curl, jq, inotifywait, wkhtmltopdf, python3
+# Installation Requirements:
+#   - Base system: Linux with bash shell
+#   - Network tools: curl for API calls, ping for connectivity checks
+#   - Processing tools: jq for JSON handling
+#   - File monitoring: inotify-tools package for inotifywait
+#   - Report generation: wkhtmltopdf for PDF creation
+#   - Web services: Python 3 for HTTP servers
+#   - Access rights: Appropriate permissions to read Snort/ntopng logs
+#
+# Error Handling:
+#   - Graceful degradation when API is unavailable
+#   - Automatic retry mechanisms for transient failures
+#   - Comprehensive logging with timestamps
+#   - Visual indicators for system state in web interface
+#
+# Security Considerations:
+#   - API keys stored in configuration file (secure permissions recommended)
+#   - Avoidance of command injection through proper parameter handling
+#   - Input validation before processing external data
+#   - Cache control for sensitive information
 #
 # Author:
 #   Nicolas Pepin
 #
 # License:
 #   MIT License
+#
+# Version:
+#   2.0.0
 #
 ###############################################################################
 
